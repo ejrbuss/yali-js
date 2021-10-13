@@ -1,9 +1,9 @@
 import assert from "assert";
 import { isList, isMap } from "immutable";
-import { AnsiCodes, applyCode } from "../src/AnsiCodes.js";
-import { createDefaultEnv } from "../src/DefaultEnv.js";
-import { Interpreter } from "../src/Interpreter.js";
-import { read } from "../src/Reader.js";
+import { AnsiCodes, applyCode } from "../js-src/AnsiCodes.js";
+import { createDefaultEnv } from "../js-src/DefaultEnv.js";
+import { Interpreter } from "../js-src/Interpreter.js";
+import { read } from "../js-src/Reader.js";
 
 async function test(name, source, expected) {
 	try {

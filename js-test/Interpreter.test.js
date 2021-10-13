@@ -1,8 +1,8 @@
 import assert from "assert";
 import { isList, isMap } from "immutable";
-import { createDefaultEnv } from "../src/DefaultEnv.js";
-import { Interpreter } from "../src/Interpreter.js";
-import { read } from "../src/Reader.js";
+import { createDefaultEnv } from "../js-src/DefaultEnv.js";
+import { Interpreter } from "../js-src/Interpreter.js";
+import { read } from "../js-src/Reader.js";
 import { test } from "./Test.js";
 
 async function testInterp(name, source, expected) {
@@ -92,5 +92,42 @@ await testInterp(
 	"((proc (x y ... rest) rest) ... [:x :y 1 2 3])",
 	"(1 2 3)"
 );
-// TODO Let custom type bindings
+await testInterp(
+	"Recur to zeor",
+	"((proc (n) (if (__builtin__equals 0 n) 0 (recur (__builtin__sub n 1)))) 10)",
+	"0"
+);
+await testInterp(
+	"Recur multiple arguments",
+	"((proc (l r) (if (__builtin__equals 0 l) r (recur (__builtin__sub l 1) (__builtin__add r 1)))) 100 50)",
+	"150"
+);
+await testInterp(
+	"Macro does not evaluate args",
+	"(def x 4) ((macro () 'x) y z ... rest)",
+	"4"
+);
+await testInterp(
+	"Macro binds source code",
+	"((macro (x ... rest) ['List ... rest]) z 1 2 3)",
+	"(1 2 3)"
+);
+await testInterp(
+	"Macro-expand macro test",
+	"(macro-expand ((macro () 'x) x y z ... rest))",
+	"x"
+);
+await testInterp("Quasi-quote with unqote", "(def x 4) `(x y ,x)", "(x y 4)");
+await testInterp(
+	"quasi-quote with unquote-splice",
+	"(def x [1 2 3]) `(x y ,,, x)",
+	"(x y 1 2 3)"
+);
+await testInterp(
+	"Quasi-quote nested",
+	"(def x [1 2 3]) (def y 'y') `(x y [1 2] ,,, x (,y))",
+	"(x y (List 1 2) 1 2 3 (y'))"
+);
+// TODO test Let custom type bindings
+// TODO test Throw (need to be able to create an error)
 // await test("Def proc name", "(def p (proc (x) x)) (Str p)", '"#proc<p>"');

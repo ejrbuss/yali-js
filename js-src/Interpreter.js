@@ -10,18 +10,8 @@ import {
 	Sym,
 } from "./Builtins.js";
 import { printStr } from "./Printer.js";
-import { Constructors, SpecialForms } from "./symbols.js";
-
-export class Snapshot {
-	/** @type {any} */ env;
-	/** @type {continuation} */ continuation;
-
-	constructor(stack, env, continuation) {
-		this.stack = stack;
-		this.env = env;
-		this.continuation = continuation;
-	}
-}
+import { Recured } from "./Recured.js";
+import { Constructors, SpecialForms } from "./Symbols.js";
 
 export class Interpreter {
 	/** @type {any} */ globalEnv;
@@ -38,26 +28,12 @@ export class Interpreter {
 	 *
 	 * @param {any} form
 	 * @param {any} env
-	 * @returns {Snapshot | any} result or snapshot
+	 * @returns {any} result or snapshot
 	 */
 	async interp(form, env) {
 		try {
 			return await this.#interpForm(form, env ?? this.globalEnv);
 		} catch (error) {
-			error.env = this.#currentEnv;
-			throw error;
-		}
-	}
-
-	/**
-	 * @param {Snapshot} snapshot
-	 * @returns {Snapshot | any} result or snapshot
-	 */
-	async resumeSnapshot(snapshot) {
-		try {
-			return await snapshot.continuation();
-		} catch (error) {
-			error.env = this.#currentEnv;
 			throw error;
 		}
 	}
@@ -88,24 +64,28 @@ export class Interpreter {
 				let expansion = await operator(...operands);
 				return await this.#interpForm(expansion, env);
 			}
-			const evaluatedOperands = [];
-			const length = operands.length;
-			for (let i = 0; i < length; i += 1) {
-				const operand = operands[i];
-				if (operand === SpecialForms.Splice) {
-					const nextOperand = operands[i + 1];
-					const interpedNextOperand = await this.#interpForm(nextOperand, env);
-					const splicableNextOperand = await Iter(interpedNextOperand);
-					evaluatedOperands.push(...splicableNextOperand);
-					break;
-				}
-				const interpedOperand = await this.#interpForm(operand, env);
-				evaluatedOperands.push(interpedOperand);
-			}
-			return await operator(...evaluatedOperands);
+			return await operator(...(await this.#interpOperands(operands, env)));
 		}
 		// All other forms evaluate to themselves
 		return form;
+	}
+
+	async #interpOperands(operands, env) {
+		const interpedOperands = [];
+		const length = operands.length;
+		for (let i = 0; i < length; i += 1) {
+			const operand = operands[i];
+			if (operand === SpecialForms.Splice) {
+				const nextOperand = operands[i + 1];
+				const interpedNextOperand = await this.#interpForm(nextOperand, env);
+				const splicableNextOperand = await Iter(interpedNextOperand);
+				interpedOperands.push(...splicableNextOperand);
+				break;
+			}
+			const interpedOperand = await this.#interpForm(operand, env);
+			interpedOperands.push(interpedOperand);
+		}
+		return interpedOperands;
 	}
 
 	async #assignBindings(bindings, env) {
@@ -173,6 +153,9 @@ export class Interpreter {
 	// Special forms
 
 	async [SpecialForms.Def](operands, env) {
+		if (operands.length !== 2) {
+			throw new Error("def expects 2 operands!");
+		}
 		const [name, value] = operands;
 		assertType(Sym, name);
 		const interpedValue = await this.#interpForm(value, env);
@@ -186,6 +169,9 @@ export class Interpreter {
 	}
 
 	async [SpecialForms.If](operands, env) {
+		if (operands.length > 3) {
+			throw new Error("if expects 3 or fewer operands!");
+		}
 		const [test, thenCase, elseCase] = operands;
 		const interpedTest = await this.#interpForm(test, env);
 		const booledTest = await Bool(interpedTest);
@@ -204,13 +190,26 @@ export class Interpreter {
 		return result;
 	}
 
-	async [SpecialForms.Recur](operands, env) {}
+	async [SpecialForms.Recur](operands, env) {
+		return new Recured(await this.#interpOperands(operands, env));
+	}
 
-	async [SpecialForms.Throw](operands, env) {}
+	async [SpecialForms.Throw](operands, env) {
+		if (operands.length !== 1) {
+			throw new Error("throw expects a single operand!");
+		}
+		const [throwable] = operands;
+		const interpedThrowable = await this.#interpForm(throwable, env);
+		throw interpedThrowable;
+	}
 
-	async [SpecialForms.Try](operands, env) {}
+	async [SpecialForms.Try](operands, env) {
+		// TODO
+	}
 
-	async [SpecialForms.Catch](operands, env) {}
+	async [SpecialForms.Catch](operands, env) {
+		// TODO
+	}
 
 	async [SpecialForms.Let](operands, env) {
 		const [bindings, ...body] = operands;
@@ -228,14 +227,19 @@ export class Interpreter {
 		assertType(List, params);
 		params = params.unshift(Constructors.List);
 		const procImpl = async (...args) => {
-			let procEnv = extend({}, env);
-			await this.#assignBinding(params, args, procEnv);
 			let result;
-			for (const form of body) {
-				result = await this.#interpForm(form, procEnv);
+			for (;;) {
+				let procEnv = extend({}, env);
+				await this.#assignBinding(params, args, procEnv);
+				for (const form of body) {
+					result = await this.#interpForm(form, procEnv);
+				}
+				if (result instanceof Recured) {
+					args = result.operands;
+					continue;
+				}
+				return result;
 			}
-			// TODO handle recur
-			return result;
 		};
 		procImpl.macro = false;
 		procImpl.params = params;
@@ -243,21 +247,92 @@ export class Interpreter {
 		return procImpl;
 	}
 
-	async [SpecialForms.Macro](operands, env) {}
+	async [SpecialForms.Macro](operands, env) {
+		let proc = await this[SpecialForms.Proc](operands, env);
+		proc.macro = true;
+		return proc;
+	}
 
-	async [SpecialForms.MacroExpand](operands, env) {}
+	async [SpecialForms.MacroExpand](operands, env) {
+		if (operands.length !== 1) {
+			throw new Error("macro-expand expects a single operand!");
+		}
+		const [macroApplication] = operands;
+		assertType(List, macroApplication);
+		const [macro, ...macroOperands] = macroApplication;
+		const macroInterped = await this.#interpForm(macro, env);
+		if (typeof macroInterped !== "function" || macroInterped.macro !== true) {
+			throw new TypeError(
+				printStr`Expected macro, but received: ${print(macroInterped)}!`
+			);
+		}
+		return await macroInterped(...macroOperands);
+	}
 
-	async [SpecialForms.Quote](operands, env) {}
+	async [SpecialForms.Quote](operands, _env) {
+		if (operands.length !== 1) {
+			throw new Error("quote expects a single operand!");
+		}
+		const [quoted] = operands;
+		return quoted;
+	}
 
-	async [SpecialForms.QuasiQuote](operands, env) {}
+	async [SpecialForms.QuasiQuote](operands, env) {
+		if (operands.length !== 1) {
+			throw new Error("quasi-quote expects a single operand!");
+		}
+		const [quasiQuoted] = operands;
+		if (!isList(quasiQuoted)) {
+			return quasiQuoted;
+		}
+		const quoted = [];
+		for (const subForm of quasiQuoted) {
+			if (isList(subForm)) {
+				const [first, second] = subForm;
+				if (first === SpecialForms.Unquote) {
+					if (subForm.size !== 2) {
+						throw new Error("unquote expects a single operand!");
+					}
+					const interpedSecond = await this.#interpForm(second, env);
+					quoted.push(interpedSecond);
+					continue;
+				}
+				if (first === SpecialForms.UnquoteSplice) {
+					if (subForm.size !== 2) {
+						throw new Error("unquote-slice expects a single operand!");
+					}
+					const interpedSecond = await this.#interpForm(second, env);
+					const sliceableSecond = await Iter(interpedSecond);
+					quoted.push(...sliceableSecond);
+					continue;
+				}
+			}
+			const quasiQuotedSubForm = await this[SpecialForms.QuasiQuote](
+				[subForm],
+				env
+			);
+			quoted.push(quasiQuotedSubForm);
+		}
+		return Imut.List(quoted);
+	}
 
-	async [SpecialForms.Unquote](operands, env) {}
+	async [SpecialForms.Unquote](_operands, _env) {
+		throw new Error("Cannot use unquote outside of quasi-quote!");
+	}
 
-	async [SpecialForms.UnquoteSplice](operands, env) {}
+	async [SpecialForms.UnquoteSplice](_operands, _env) {
+		throw new Error("Cannot use unquote-splice outside of quasi-quote!");
+	}
 
-	async [SpecialForms.Splice](operands, env) {}
+	async [SpecialForms.Splice](_operands, _env) {
+		throw new Error("Cannot use unquote-splice outside of bindings!");
+	}
 
-	async [SpecialForms.Dot](operands, env) {}
+	async [SpecialForms.Eval](operands, env) {
+		throw new Error("TODO");
+	}
 
-	async [SpecialForms.Breakpoint](operands, env) {}
+	async [SpecialForms.Import](operands, env) {
+		throw new Error("TODO");
+	}
 }

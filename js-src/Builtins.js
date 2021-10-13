@@ -6,6 +6,8 @@ import { Keyword as KeywordImpl } from "./keyword.js";
 import * as Printer from "./Printer.js";
 import * as Reader from "./Reader.js";
 
+const JsError = global.Error;
+
 const TypeOftype = {
 	undefined: Nil,
 	boolean: Bool,
@@ -28,51 +30,25 @@ export function typeOf(a) {
 	if (Imut.isMap(a)) {
 		return Map;
 	}
+	if (a instanceof JsError) {
+		return Error;
+	}
 	if (typeof a === "object" && a !== null) {
 		let constructor = a.type;
 		if (typeof constructor === "function") {
 			return constructor;
 		}
 	}
-	return Unknown;
 }
 
-export function typeName(a) {
-	let constructor = TypeOftype[typeof a];
-	if (typeof constructor !== "undefined") {
-		return constructor.name;
+export function typeName(type) {
+	if (type) {
+		return type.typeName ?? type.name;
 	}
-	if (typeof a === "object" && a !== null) {
-		let name = a.typeName;
-		if (typeof name === "string") {
-			return name;
-		}
-	}
-	return Unknown.name;
-}
-
-export function isType(type, a) {
-	let constructor = TypeOftype[typeof a];
-	if (typeof constructor !== "undefined") {
-		return constructor === type;
-	}
-	if (type === List) {
-		return Imut.isList(a);
-	}
-	if (type === Map) {
-		return Imut.isMap(a);
-	}
-	if (typeof a === "object" && a !== null) {
-		let constructor = a.type;
-		if (typeof constructor === "function") {
-			return constructor === type;
-		}
-	}
-	return type === Unknown;
 }
 
 export function assertType(type, a) {
-	if (!isType(type, a)) {
+	if (type !== typeOf(a)) {
 		throw new TypeError(
 			`Expected type: ${typeName(type)}, but received: ${print(a)}!`
 		);
@@ -97,14 +73,14 @@ export async function Bool(a) {
 		if (typeof converter === "function") {
 			let converted = await converter.apply(a);
 			if (typeof converted !== "boolean") {
-				throw new Error(
+				throw new JsError(
 					Printer.printStr`The to-Bool conversion of ${a} did not return a Bool!`
 				);
 			}
 			return converted;
 		}
 	}
-	throw new Error(Printer.printStr`Cannot convert ${a} to Bool!`);
+	throw new JsError(Printer.printStr`Cannot convert ${a} to Bool!`);
 }
 
 export async function Num(x) {
@@ -119,14 +95,14 @@ export async function Num(x) {
 		if (typeof converter === "function") {
 			let converted = await converter.apply(x);
 			if (typeof converted !== "number") {
-				throw new Error(
+				throw new JsError(
 					Printer.printStr`The to-Num conversion of ${x} did not return a Num!`
 				);
 			}
 			return converted;
 		}
 	}
-	throw new Error(Printer.printStr`Cannot convert ${x} to Num!`);
+	throw new JsError(Printer.printStr`Cannot convert ${x} to Num!`);
 }
 
 export async function Str(...xs) {
@@ -143,7 +119,7 @@ export async function Str(...xs) {
 				if (typeof converter === "function") {
 					let converted = await converter.apply(x);
 					if (typeof converted !== "string") {
-						throw new Error(
+						throw new JsError(
 							Printer.printStr`The to-Str conversion of ${x} did not return a Str!`
 						);
 					}
@@ -159,7 +135,7 @@ export async function Str(...xs) {
 export function Sym(x) {
 	let name = Str(x);
 	if (name.startsWith("#")) {
-		throw new Error(
+		throw new JsError(
 			`Sym cannot have name ${name}, as # is reserved for unique symbols!`
 		);
 	}
@@ -182,14 +158,14 @@ export async function Proc(x) {
 		if (typeof toProc === "function") {
 			let proc = await toProc.apply(x);
 			if (typeof proc !== "function") {
-				throw new Error(
+				throw new JsError(
 					Printer.printStr`The to-Proc conversion of ${x} did not return a Proc!`
 				);
 			}
 			return proc;
 		}
 	}
-	throw new Error(Printer.printStr`Cannot convert ${x} to Proc!`);
+	throw new JsError(Printer.printStr`Cannot convert ${x} to Proc!`);
 }
 
 export function List(...xs) {
@@ -205,8 +181,8 @@ export function Map(...xs) {
 	return Imut.Map(pairs);
 }
 
-export function Unknown() {
-	return {};
+export async function Error(message) {
+	return new JsError(await Str(message));
 }
 
 export async function Iter(x) {
@@ -225,7 +201,7 @@ export async function Iter(x) {
 			return makeIter(x);
 		}
 	}
-	throw new Error(Printer.printStr`Cannot convert ${x} to Iter!`);
+	throw new JsError(Printer.printStr`Cannot convert ${x} to Iter!`);
 }
 
 // Core operations
@@ -240,7 +216,7 @@ export async function get(x, ...args) {
 			return await getImpl.apply(x, args);
 		}
 	}
-	throw new Error(Printer.printStr`Cannot call get on ${x}!`);
+	throw new JsError(Printer.printStr`Cannot call get on ${x}!`);
 }
 
 export async function equals(a, b) {
@@ -279,6 +255,10 @@ export function neg(a) {
 
 export function add(a, b) {
 	return a + b;
+}
+
+export function sub(a, b) {
+	return a - b;
 }
 
 export function mul(a, b) {
@@ -343,7 +323,7 @@ export function gte(a, b) {
 
 // IO operations
 
-export function nodeProcess() {
+export function jsProcess() {
 	return process;
 }
 
@@ -357,11 +337,15 @@ export function readFile(file) {
 	return fs.readFileSync(file, { encoding: "utf-8" });
 }
 
+let readlineInterface;
+
 export async function input(prompt) {
-	const readlineInterface = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
+	if (typeof readlineInterface === "undefined") {
+		readlineInterface = readline.createInterface({
+			input: process.stdin,
+			output: process.stdout,
+		});
+	}
 	return new Promise((resolve) => {
 		readlineInterface.question(prompt, resolve);
 	});
@@ -370,6 +354,16 @@ export async function input(prompt) {
 export async function exec(...args) {
 	const strArgs = await Promise.all(args.map((x) => Str(x)));
 	return child_process.execSync(strArgs.join(" ")).toString();
+}
+
+// interop
+
+export function jsGetProperty(object, property) {
+	return object[property];
+}
+
+export function jsSetProperty(object, property, value) {
+	object[property] = value;
 }
 
 // other

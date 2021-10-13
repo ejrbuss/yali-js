@@ -1,3 +1,4 @@
+import util from "util";
 import { isList, isMap } from "immutable";
 import { AnsiCodes, applyCode } from "./AnsiCodes.js";
 import { Keyword } from "./keyword.js";
@@ -43,10 +44,15 @@ export function print(form, transforms = DefaultTransforms) {
 	if (typeof form === "function") {
 		let name = form.procNamme ?? form.typeName ?? form.name ?? "anonymous";
 		let type = form.macro ? "macro" : "proc";
-		return transforms.PoundString(`#${type}<${name}>`);
+		return transforms.PoundString(`#<${type}::${name}>`);
 	}
 	if (form instanceof Keyword) {
 		return transforms.Keyword(form.toStr());
+	}
+	if (form instanceof Error) {
+		let name = form.typeName ?? form.name ?? "Error";
+		let message = form.message;
+		return transforms.PoundString(`#<${name}::${JSON.stringify(message)}>`);
 	}
 	if (isList(form)) {
 		return `${transforms.Punctuation("(")}${form
@@ -60,12 +66,12 @@ export function print(form, transforms = DefaultTransforms) {
 			.join(" ")}${transforms.Punctuation("}")}`;
 	}
 	if (typeof form === "object" && form !== null) {
-		let name = form.typeName;
+		let name = form.typeName ?? form.name;
 		if (typeof name === "string") {
-			return transforms.PoundString(`#object<${name}>`);
+			return transforms.PoundString(`#<${name}>`);
 		}
 	}
-	return transforms.PoundString(`#js<${form}>`);
+	return transforms.PoundString(`#<js::${util.inspect(form)}>`);
 }
 
 export function printStr(strings, ...subs) {

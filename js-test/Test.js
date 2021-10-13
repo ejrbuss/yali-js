@@ -1,7 +1,7 @@
 // This is a barebones test framework to keep this project dependency free
 import assert from "assert";
-import { AnsiCodes, applyCode } from "../src/AnsiCodes.js";
-import { exec } from "../src/Builtins.js";
+import { AnsiCodes, applyCode } from "../js-src/AnsiCodes.js";
+import { exec } from "../js-src/Builtins.js";
 
 let passes = 0;
 
@@ -28,9 +28,8 @@ export async function test(name, testFunction) {
 	try {
 		await testFunction();
 		passes += 1;
-		console.log(applyCode(AnsiCodes.FgGreen, ` ✔ ${name}`));
+		printSuccess(name);
 	} catch (error) {
-		delete error.env; // decrease noise
 		if (error instanceof assert.AssertionError) {
 			Fails.push([name, error]);
 			printFail(name, error);
@@ -46,10 +45,10 @@ export async function main() {
 		AnsiCodes.FgBlack + AnsiCodes.Bright + AnsiCodes.BgGreen,
 		" TEST "
 	);
-	let testFiles = (await exec(`find ./test/**.js`)).trim().split("\n");
+	let testFiles = (await exec(`find ./js-test/**.js`)).trim().split("\n");
 	for (const testFile of testFiles) {
 		try {
-			const basename = testFile.replace(/^\.\/test\//, "");
+			const basename = testFile.replace(/^\.\/js-test\//, "");
 			if (basename === "Test.js") {
 				continue;
 			}

@@ -8,8 +8,8 @@
     "test": "test"
   },
   "scripts": {
-    "start": "node ./src/Yali.js",
-    "test": "node ./test/Test.js"
+    "start": "node ./js-src/Yali.js",
+    "test": "node ./js-test/Test.js"
   },
   "repository": {
     "type": "git",

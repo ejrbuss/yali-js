@@ -23,7 +23,7 @@ async function main() {
 			let prompt = source.length === 0 ? StartPrompt : ContinuePrompt;
 			source += await input(prompt);
 			let forms = read(source, "repl");
-			let result = undefined;
+			let result;
 			for (let form of forms) {
 				result = await interpreter.interp(form);
 			}
@@ -36,7 +36,6 @@ async function main() {
 				continue;
 			}
 			sequentialErrors += 1;
-			delete error.env;
 			console.error(error);
 		}
 		source = "";

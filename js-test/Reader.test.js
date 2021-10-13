@@ -1,6 +1,6 @@
 import assert from "assert";
-import { Keyword } from "../src/keyword.js";
-import { read } from "../src/Reader.js";
+import { Keyword } from "../js-src/keyword.js";
+import { read } from "../js-src/Reader.js";
 import { test } from "./Test.js";
 
 async function testRead(name, source, expected) {

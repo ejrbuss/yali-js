@@ -28,7 +28,7 @@ export const Constructors = {
 	Proc: Symbol.for("Proc"),
 	List: Symbol.for("List"),
 	Map: Symbol.for("Map"),
-	Unknown: Symbol.for("Unknown"),
+	Error: Symbol.for("Error"),
 };
 
 export const SpecialForms = {
@@ -48,6 +48,6 @@ export const SpecialForms = {
 	Unquote: Symbol.for("unquote"),
 	UnquoteSplice: Symbol.for("unquote-splice"),
 	Splice: Symbol.for("..."),
-	Dot: Symbol.for("."),
-	Breakpoint: Symbol.for("breakpoint"),
+	Eval: Symbol.for("eval"),
+	Import: Symbol.for("import"),
 };

@@ -1,6 +1,6 @@
 import assert from "assert";
-import { print } from "../src/Printer.js";
-import { read } from "../src/Reader.js";
+import { print } from "../js-src/Printer.js";
+import { read } from "../js-src/Reader.js";
 import { test } from "./Test.js";
 
 async function testPrint(name, source, expected) {

@@ -1,3 +1,4 @@
+import { Interpreter } from "./Interpreter.js";
 import * as Builtins from "./Builtins.js";
 import { Constructors } from "./Symbols.js";
 
@@ -11,5 +12,6 @@ export function createDefaultEnv() {
 		let symbol = Constructors[constructorName];
 		env[symbol] = Builtins[constructorName];
 	}
+	env[Symbol.for("x")] = [1, 2, 3];
 	return env;
 }
