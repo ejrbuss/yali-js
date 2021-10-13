@@ -367,8 +367,9 @@ export async function input(prompt) {
 	});
 }
 
-export function exec(...args) {
-	return child_process.execSync(args.map(Str).join(" ")).toString();
+export async function exec(...args) {
+	const strArgs = await Promise.all(args.map((x) => Str(x)));
+	return child_process.execSync(strArgs.join(" ")).toString();
 }
 
 // other
