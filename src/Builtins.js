@@ -210,7 +210,7 @@ export function Unknown() {
 }
 
 export async function Iter(x) {
-	if (isList(x) || isMap(x)) {
+	if (isList(x) || isMap(x) || Array.isArray(x)) {
 		return x;
 	}
 	if (typeof x === "object" && x !== null) {
@@ -379,5 +379,5 @@ export function uniqueSym(a) {
 }
 
 export function extend(target, parent) {
-	Object.setPrototypeOf(target, parent);
+	return Object.setPrototypeOf(target, parent);
 }

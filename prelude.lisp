@@ -463,3 +463,5 @@ gfx::Vec2
 	(+ a b) (Operator+ a b)
 	(+ a b ... more) (reduce + (Operator+ a b) more))
 
+(loop (i 0)
+	(recur (inc i))

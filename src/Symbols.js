@@ -35,7 +35,6 @@ export const SpecialForms = {
 	Def: Symbol.for("def"),
 	If: Symbol.for("if"),
 	Do: Symbol.for("do"),
-	Loop: Symbol.for("loop"),
 	Recur: Symbol.for("recur"),
 	Throw: Symbol.for("throw"),
 	Try: Symbol.for("try"),

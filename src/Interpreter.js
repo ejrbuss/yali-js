@@ -1,7 +1,16 @@
-import { isList, isMap } from "immutable";
-import { assertType, Bool, Iter, Proc, Sym } from "./Builtins.js";
-import { print, printStr } from "./Printer.js";
-import { SpecialForms } from "./symbols.js";
+import Imut, { isList, isMap } from "immutable";
+import {
+	assertType,
+	Bool,
+	extend,
+	get,
+	Iter,
+	List,
+	Proc,
+	Sym,
+} from "./Builtins.js";
+import { printStr } from "./Printer.js";
+import { Constructors, SpecialForms } from "./symbols.js";
 
 export class Snapshot {
 	/** @type {any} */ env;
@@ -99,7 +108,70 @@ export class Interpreter {
 		return form;
 	}
 
+	async #assignBindings(bindings, env) {
+		assertType(List, bindings);
+		const length = bindings.size;
+		for (let i = 0; i < length; i += 2) {
+			const bindingForm = bindings.get(i);
+			const valueForm = bindings.get(i + 1);
+			const value = await this.#interpForm(valueForm, env);
+			await this.#assignBinding(bindingForm, value, env);
+		}
+	}
+
+	async #assignBinding(bindingForm, value, env) {
+		// Recursion bottoms out
+		if (typeof bindingForm === "symbol") {
+			env[bindingForm] = value;
+			return;
+		}
+		if (isList(bindingForm)) {
+			const [type, ...operands] = bindingForm;
+			// Fast path List
+			if (type === Constructors.List) {
+				const [...splicedValue] = await Iter(value);
+				const length = operands.length;
+				for (let i = 0; i < length; i += 1) {
+					const operand = operands[i];
+					if (operand === SpecialForms.Splice) {
+						const nextOperand = operands[i + 1];
+						await this.#assignBinding(
+							nextOperand,
+							Imut.List(splicedValue.slice(i)),
+							env
+						);
+						break;
+					}
+					await this.#assignBinding(operand, splicedValue[i], env);
+				}
+				return;
+			}
+			if (type === Constructors.Map) {
+				const length = operands.length;
+				for (let i = 0; i < length; i += 2) {
+					const key = operands[i];
+					const interpedKey = await this.#interpForm(key, env);
+					const operand = operands[i + 1];
+					this.#assignBinding(operand, await get(value, interpedKey), env);
+				}
+				return;
+			}
+			const interpedType = await this.#interpForm(type, env);
+			assertType(interpedType, value);
+			// recurse with the list constructor
+			this.#assignBinding(
+				Imut.List.of(Constructors.List, ...operands),
+				value,
+				env
+			);
+		}
+		throw new Error(
+			printStr`Cannot bind value: ${value} to binding form: ${bindingForm}!`
+		);
+	}
+
 	// Special forms
+
 	async [SpecialForms.Def](operands, env) {
 		const [name, value] = operands;
 		assertType(Sym, name);
@@ -124,9 +196,13 @@ export class Interpreter {
 		}
 	}
 
-	async [SpecialForms.Do](operands, env) {}
-
-	async [SpecialForms.Loop](operands, env) {}
+	async [SpecialForms.Do](operands, env) {
+		let result;
+		for (let operand of operands) {
+			result = await this.#interpForm(operand, env);
+		}
+		return result;
+	}
 
 	async [SpecialForms.Recur](operands, env) {}
 
@@ -136,9 +212,36 @@ export class Interpreter {
 
 	async [SpecialForms.Catch](operands, env) {}
 
-	async [SpecialForms.Let](operands, env) {}
+	async [SpecialForms.Let](operands, env) {
+		const [bindings, ...body] = operands;
+		const letEnv = extend({}, env);
+		await this.#assignBindings(bindings, letEnv);
+		let result;
+		for (const form of body) {
+			result = await this.#interpForm(form, letEnv);
+		}
+		return result;
+	}
 
-	async [SpecialForms.Proc](operands, env) {}
+	async [SpecialForms.Proc](operands, env) {
+		let [params, ...body] = operands;
+		assertType(List, params);
+		params = params.unshift(Constructors.List);
+		const procImpl = async (...args) => {
+			let procEnv = extend({}, env);
+			await this.#assignBinding(params, args, procEnv);
+			let result;
+			for (const form of body) {
+				result = await this.#interpForm(form, procEnv);
+			}
+			// TODO handle recur
+			return result;
+		};
+		procImpl.macro = false;
+		procImpl.params = params;
+		procImpl.body = body;
+		return procImpl;
+	}
 
 	async [SpecialForms.Macro](operands, env) {}
 

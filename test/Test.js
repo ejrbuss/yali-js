@@ -4,8 +4,25 @@ import { AnsiCodes, applyCode } from "../src/AnsiCodes.js";
 import { exec } from "../src/Builtins.js";
 
 let passes = 0;
-let fails = 0;
-let errors = 0;
+
+const Fails = [];
+const Errors = [];
+
+function printSuccess(name) {
+	console.log(applyCode(AnsiCodes.FgGreen, ` ✔ ${name}`));
+}
+
+function printFail(name, error) {
+	console.log(applyCode(AnsiCodes.FgRed, ` ✘ ${name}\n`));
+	console.error(error);
+	console.log();
+}
+
+function printError(name, error) {
+	console.log(applyCode(AnsiCodes.FgYellow, ` ✘ ${name}\n`));
+	console.error(error);
+	console.log();
+}
 
 export async function test(name, testFunction) {
 	try {
@@ -13,13 +30,13 @@ export async function test(name, testFunction) {
 		passes += 1;
 		console.log(applyCode(AnsiCodes.FgGreen, ` ✔ ${name}`));
 	} catch (error) {
+		delete error.env; // decrease noise
 		if (error instanceof assert.AssertionError) {
-			fails += 1;
+			Fails.push([name, error]);
+			printFail(name, error);
 		} else {
-			errors += 1;
-			console.log();
-			console.log(applyCode(AnsiCodes.FgRed, ` ✘ ${name}`));
-			console.error(error);
+			Errors.push([name, error]);
+			printError(name, error);
 		}
 	}
 }
@@ -44,9 +61,24 @@ export async function main() {
 			process.exit(1);
 		}
 	}
+
+	if (Fails.length > 0) {
+		console.log(`\n${header} Test failures\n`);
+		for (const [name, error] of Fails) {
+			printFail(name, error);
+		}
+	}
+
+	if (Errors.length > 0) {
+		console.log(`\n${header} Test errors\n`);
+		for (const [name, error] of Errors) {
+			printError(name, error);
+		}
+	}
+
 	let passesText = applyCode(AnsiCodes.FgGreen, passes);
-	let failsText = applyCode(AnsiCodes.FgRed, fails);
-	let errorsText = applyCode(AnsiCodes.FgYellow, errors);
+	let failsText = applyCode(AnsiCodes.FgRed, Fails.length);
+	let errorsText = applyCode(AnsiCodes.FgYellow, Errors.length);
 	console.log(
 		`\n${header} Passes: ${passesText} Fails: ${failsText} Errors: ${errorsText}\n`
 	);
