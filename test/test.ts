@@ -60,8 +60,8 @@ export async function testMain() {
 		.split("\n");
 	for (const testFile of testFiles) {
 		try {
-			const basename = testFile.replace(Dirname, "");
-			if (basename === "Test.js") {
+			const basename = testFile.replace(Dirname + "/", "");
+			if (basename === "test.js") {
 				continue;
 			}
 			console.log(`\n${header} Running tests in ${basename} ...\n`);

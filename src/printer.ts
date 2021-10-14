@@ -29,7 +29,9 @@ export function print(
 	colors: IMap<Keyword, string> = IMap()
 ): string {
 	function applyColor(keyword: Keyword, s: string) {
-		return applyCode(colors.get(keyword, ""), s);
+		return colors.has(keyword)
+			? applyCode(colors.get(keyword) as string, s)
+			: s;
 	}
 	if (typeof form === "undefined") {
 		return applyColor(nil, "nil");

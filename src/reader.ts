@@ -54,7 +54,7 @@ export function read(source: string, file = "<anonymous>"): IList<unknown> {
 				return false;
 			}
 			if (image.startsWith(":")) {
-				return Keyword.for(image);
+				return Keyword.for(image.substr(1));
 			}
 			if (ReNumber.test(image)) {
 				return parseFloat(image);
