@@ -1,4 +1,4 @@
-import { isList, isMap, List as IList, List, Map as IMap } from "immutable";
+import { isList, isMap, List as IList } from "immutable";
 import { toJsIter } from "./iter.js";
 import { printTag } from "./printer.js";
 import { Recured } from "./recured.js";
@@ -6,31 +6,24 @@ import { ConstructorSymbols, Special, SpecialForms } from "./symbols.js";
 import {
 	assertType,
 	BoolConstructor,
-	Env,
 	ListConstructor,
-	Proc,
 	ProcConstructor,
 	SymConstructor,
 } from "./types.js";
 
-function extendEnv(env: Env): Env {
+function extendEnv(env) {
 	return Object.setPrototypeOf({}, env);
 }
 
 export class Interpreter {
-	static running?: Interpreter;
-
-	globalEnv: Env;
-	currentEnv: Env;
-	stack: Function[];
-
-	constructor(initialEnv: Env) {
+	//
+	constructor(initialEnv) {
 		this.globalEnv = extendEnv(initialEnv);
 		this.currentEnv = this.globalEnv;
 		this.stack = [];
 	}
 
-	interp(form: unknown, env?: Env): unknown {
+	interp(form, env) {
 		const savedRunning = Interpreter.running;
 		const savedStack = this.stack;
 		const savedEnv = this.currentEnv;
@@ -45,7 +38,7 @@ export class Interpreter {
 		}
 	}
 
-	throw(error: unknown): never {
+	throw(error) {
 		if (typeof error === "object" && error !== null) {
 			const currentStack = error[Special.stack];
 			if (typeof currentStack === "undefined") {
@@ -55,7 +48,7 @@ export class Interpreter {
 		throw error;
 	}
 
-	wrapExternal<T>(f: () => T): T {
+	wrapExternal(f) {
 		try {
 			return f();
 		} catch (error) {
@@ -63,10 +56,10 @@ export class Interpreter {
 		}
 	}
 
-	innerInterp(form: unknown, env: Env): unknown {
+	innerInterp(form, env) {
 		this.currentEnv = env;
 		if (typeof form === "symbol") {
-			let interped = env[form] as unknown;
+			let interped = env[form];
 			if (typeof interped !== "undefined") {
 				return interped;
 			}
@@ -86,7 +79,7 @@ export class Interpreter {
 			if (typeof operator !== "function") {
 				operator = this.wrapExternal(() => ProcConstructor(operator));
 			}
-			let anyOperator = operator as Function;
+			let anyOperator = operator;
 			// Macro expansion
 			if (anyOperator[Special.macro] === true) {
 				// TODO move over Special.sourceRef of form onto expanded
@@ -108,8 +101,8 @@ export class Interpreter {
 		return form;
 	}
 
-	interpOperands(operands: unknown[], env: Env): unknown[] {
-		const interpedOperands: unknown[] = [];
+	interpOperands(operands, env) {
+		const interpedOperands = [];
 		const length = operands.length;
 		for (let i = 0; i < length; i += 1) {
 			const operand = operands[i];
@@ -128,9 +121,9 @@ export class Interpreter {
 		return interpedOperands;
 	}
 
-	assignBindings(bindings: unknown, env: Env): void {
+	assignBindings(bindings, env) {
 		this.wrapExternal(() => assertType(ListConstructor, bindings));
-		const bindingsList = bindings as IList<unknown>;
+		const bindingsList = bindings;
 		const length = bindingsList.size;
 		for (let i = 0; i < length; i += 2) {
 			const binding = bindingsList.get(i);
@@ -140,7 +133,7 @@ export class Interpreter {
 		}
 	}
 
-	assignBinding(binding: unknown, value: unknown, env: Env): void {
+	assignBinding(binding, value, env) {
 		if (typeof binding === "symbol") {
 			env[binding] = value;
 			return;
@@ -189,11 +182,10 @@ export class Interpreter {
 	}
 
 	// Special forms
-
-	[SpecialForms.Def](operands: unknown[], env: Env): void {
+	[SpecialForms.Def](operands, env) {
 		const name = operands[0];
 		this.wrapExternal(() => assertType(SymConstructor, name));
-		const nameSymbol = name as symbol;
+		const nameSymbol = name;
 		const value = operands[1];
 		const interpedValue = this.innerInterp(value, env);
 		if (
@@ -205,7 +197,7 @@ export class Interpreter {
 		env[nameSymbol] = interpedValue;
 	}
 
-	[SpecialForms.If](operands: unknown[], env: Env): unknown {
+	[SpecialForms.If](operands, env) {
 		const test = operands[0];
 		const interpedTest = this.innerInterp(test, env);
 		const booledTest = this.wrapExternal(() => BoolConstructor(interpedTest));
@@ -216,43 +208,43 @@ export class Interpreter {
 		}
 	}
 
-	[SpecialForms.Do](operands: unknown[], env: Env): unknown {
+	[SpecialForms.Do](operands, env) {
 		const body = operands;
-		let result: unknown;
-		body.forEach((form: unknown) => (result = this.innerInterp(form, env)));
+		let result;
+		body.forEach((form) => (result = this.innerInterp(form, env)));
 		return result;
 	}
 
-	[SpecialForms.Recur](operands: unknown[], env: Env): Recured {
+	[SpecialForms.Recur](operands, env) {
 		// TODO implement handling in main loop!
 		const recurApplication = operands[0];
 		this.wrapExternal(() => assertType(ListConstructor, recurApplication));
-		const [recurOperator, ...recurOperands] = recurApplication as any;
+		const [recurOperator, ...recurOperands] = recurApplication;
 		const interpedRecurOperator = this.innerInterp(recurOperator, env);
 		const interpedRecurOperands = this.interpOperands(recurOperands, env);
 		return new Recured(interpedRecurOperator, interpedRecurOperands);
 	}
 
-	[SpecialForms.Throw](operands: unknown[], env: Env) {
+	[SpecialForms.Throw](operands, env) {
 		const throwable = operands[0];
 		const interpedThrowable = this.innerInterp(throwable, env);
-		this.throw(interpedThrowable as Error);
+		this.throw(interpedThrowable);
 	}
 
-	[SpecialForms.Try](operands: unknown[], env: Env): unknown {
+	[SpecialForms.Try](operands, env) {
 		const body = operands;
 		const elseCase = operands.pop();
 		try {
-			let result: unknown;
-			body.forEach((form: unknown) => (result = this.innerInterp(form, env)));
+			let result;
+			body.forEach((form) => (result = this.innerInterp(form, env)));
 			return result;
 		} catch (error) {
 			if (isList(elseCase) && elseCase.first() === SpecialForms.Catch) {
 				const [_, binding, ...body] = elseCase;
 				const catchEnv = extendEnv(env);
 				this.assignBinding(binding, error, catchEnv);
-				let result: unknown;
-				body.forEach((form: unknown) => (result = this.innerInterp(form, env)));
+				let result;
+				body.forEach((form) => (result = this.innerInterp(form, env)));
 				return result;
 			}
 			return this.innerInterp(elseCase, env);
@@ -263,42 +255,38 @@ export class Interpreter {
 		this.throw(new Error("Cannot use catch outside of try!"));
 	}
 
-	[SpecialForms.Let](operands: unknown[], env: Env): unknown {
+	[SpecialForms.Let](operands, env) {
 		const [bindings, ...body] = operands;
 		const letEnv = extendEnv(env);
 		this.assignBindings(bindings, letEnv);
-		let result: unknown;
-		body.forEach((form: unknown) => (result = this.innerInterp(form, env)));
+		let result;
+		body.forEach((form) => (result = this.innerInterp(form, env)));
 		return result;
 	}
 
-	[SpecialForms.Proc](operands: unknown[], env: Env): unknown {
+	[SpecialForms.Proc](operands, env) {
 		const [params, ...body] = operands;
-		this.wrapExternal(() =>
-			assertType<IList<unknown>>(ListConstructor, params)
-		);
-		const paramsList = (params as IList<unknown>).unshift(
-			ConstructorSymbols.List
-		);
+		this.wrapExternal(() => assertType(ListConstructor, params));
+		const paramsList = params.unshift(ConstructorSymbols.List);
 		// Specialize proc implementation, basedd on body length
-		let anonymous: Proc;
+		let anonymous;
 		if (body.length === 0) {
-			anonymous = (...args: unknown[]) => {
+			anonymous = (...args) => {
 				this.assignBinding(paramsList, args, {});
 			};
 		} else if (body.length === 1) {
 			const bodyForm = body[0];
-			anonymous = (...args: unknown[]) => {
+			anonymous = (...args) => {
 				const procEnv = extendEnv(env);
 				this.assignBinding(paramsList, args, procEnv);
 				return this.innerInterp(bodyForm, procEnv);
 			};
 		} else {
-			anonymous = (...args: unknown[]) => {
+			anonymous = (...args) => {
 				const procEnv = extendEnv(env);
 				this.assignBinding(paramsList, args, procEnv);
-				let result: unknown;
-				body.forEach((form: unknown) => (result = this.innerInterp(form, env)));
+				let result;
+				body.forEach((form) => (result = this.innerInterp(form, env)));
 				return result;
 			};
 		}
@@ -308,16 +296,16 @@ export class Interpreter {
 		return anonymous;
 	}
 
-	[SpecialForms.Macro](operands: unknown[], env: Env): unknown {
+	[SpecialForms.Macro](operands, env) {
 		let proc = this[SpecialForms.Proc](operands, env);
 		this[Special.macro] = true;
 		return proc;
 	}
 
-	[SpecialForms.MacroExpand](operands: unknown[], env: Env): unknown {
+	[SpecialForms.MacroExpand](operands, env) {
 		const macroApplication = operands[0];
 		this.wrapExternal(() => assertType(ListConstructor, macroApplication));
-		const [macro, ...macroOperands] = macroApplication as IList<unknown>;
+		const [macro, ...macroOperands] = macroApplication;
 		const macroInterped = this.innerInterp(macro, env);
 		if (
 			typeof macroInterped !== "function" ||
@@ -330,16 +318,16 @@ export class Interpreter {
 		return macroInterped(...macroOperands);
 	}
 
-	[SpecialForms.Quote](operands: unknown[]): unknown {
+	[SpecialForms.Quote](operands) {
 		return operands[0];
 	}
 
-	[SpecialForms.QuasiQuote](operands: unknown[], env: Env): unknown {
+	[SpecialForms.QuasiQuote](operands, env) {
 		const quasiQuoted = operands[0];
 		if (!isList(quasiQuoted)) {
 			return quasiQuoted;
 		}
-		const quoted: unknown[] = [];
+		const quoted = [];
 		quasiQuoted.forEach((subForm) => {
 			if (isList(subForm)) {
 				const [first, second] = subForm;
@@ -357,10 +345,7 @@ export class Interpreter {
 					return;
 				}
 			}
-			const quasiQuotedSubForm = this[SpecialForms.QuasiQuote](
-				[subForm],
-				env
-			) as unknown;
+			const quasiQuotedSubForm = this[SpecialForms.QuasiQuote]([subForm], env);
 			quoted.push(quasiQuotedSubForm);
 		});
 		return IList(quoted);
@@ -378,7 +363,7 @@ export class Interpreter {
 		this.throw(new Error("Cannot use unquote-splice outside of bindings!"));
 	}
 
-	async [SpecialForms.Async](operands: unknown[], env: Env): Promise<unknown> {
+	async [SpecialForms.Async](operands, env) {
 		throw new Error("TODO");
 	}
 

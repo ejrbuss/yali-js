@@ -3,20 +3,8 @@ import { Keyword } from "./keyword.js";
 import { print } from "./printer.js";
 import { Special } from "./symbols.js";
 
-export type Nil = undefined;
-export type Bool = boolean;
-export type Num = number;
-export type Str = string;
-export type Sym = symbol;
-export type Proc = Function;
-export type Env = {};
-
 export class MultiProc {
-	typeArgsShape: IList<unknown>;
-	methodTable: IMap<IList<unknown>, Proc | Nil>;
-	defHook: Proc;
-
-	constructor(name: string, typeArgsShape: IList<unknown>, defHook?: Proc) {
+	constructor(name, typeArgsShape, defHook) {
 		this[Special.name] = name;
 		this.methodTable = IMap();
 		this.typeArgsShape = typeArgsShape;
@@ -27,15 +15,15 @@ export class MultiProc {
 		return this.typeArgsShape.unshift(Symbol.for(this[Special.name]));
 	}
 
-	defMethod(typeArgs: IList<unknown>, impl: Proc): void {
+	defMethod(typeArgs, impl) {
 		throw new Error("TODO");
 	}
 
-	getMethod(typeArgs: IList<unknown>): Proc | Nil {
+	getMethod(typeArgs) {
 		return this.methodTable.get(typeArgs);
 	}
 
-	dispatch(...args: unknown[]): unknown {
+	dispatch(...args) {
 		let typeArgs = IList(args.map(typeOf));
 		let impl = this.methodTable.get(typeArgs);
 		if (typeof impl !== "undefined") {
@@ -47,11 +35,11 @@ export class MultiProc {
 	}
 }
 
-export function NilConstructor(): Nil {
+export function NilConstructor() {
 	return;
 }
 
-export function BoolConstructor(a: unknown): Bool {
+export function BoolConstructor(a) {
 	if (typeof a === "boolean") {
 		return a;
 	}
@@ -66,7 +54,7 @@ export function BoolConstructor(a: unknown): Bool {
 	);
 }
 
-export function NumConstructor(a: unknown): Num {
+export function NumConstructor(a) {
 	if (typeof a === "number") {
 		return a;
 	}
@@ -81,7 +69,7 @@ export function NumConstructor(a: unknown): Num {
 	);
 }
 
-export function StrConstructor(...args: unknown[]): Str {
+export function StrConstructor(...args) {
 	return args
 		.map((a) => {
 			if (typeof a === "string") {
@@ -101,23 +89,23 @@ export function StrConstructor(...args: unknown[]): Str {
 		.join("");
 }
 
-export function SymConstructor(a: unknown): Sym {
+export function SymConstructor(a) {
 	if (typeof a === "symbol") {
 		return a;
 	}
-	assertType<Str>(StrConstructor, a);
+	assertType(StrConstructor, a);
 	return Symbol.for(a);
 }
 
-export function KeywordConstructor(a: unknown): Keyword {
+export function KeywordConstructor(a) {
 	if (a instanceof Keyword) {
 		return a;
 	}
-	assertType<Str>(StrConstructor, a);
+	assertType(StrConstructor, a);
 	return Keyword.for(a);
 }
 
-export function ProcConstructor(a: unknown): Proc {
+export function ProcConstructor(a) {
 	if (typeof a === "function") {
 		return a;
 	}
@@ -132,17 +120,17 @@ export function ProcConstructor(a: unknown): Proc {
 	);
 }
 
-export function MultiProcConstructor(a: unknown): MultiProc {
-	assertType<MultiProc>(MultiProcConstructor, a);
+export function MultiProcConstructor(a) {
+	assertType(MultiProcConstructor, a);
 	return a;
 }
 
-export function ListConstructor(...args: unknown[]): IList<unknown> {
+export function ListConstructor(...args) {
 	return IList(args);
 }
 
-export function MapConstructor(...args: unknown[]): IMap<unknown, unknown> {
-	const keyValuePairs: [unknown, unknown][] = [];
+export function MapConstructor(...args) {
+	const keyValuePairs = [];
 	const length = args.length;
 	for (let i = 0; i < length; i += 2) {
 		const key = args[i];
@@ -152,7 +140,7 @@ export function MapConstructor(...args: unknown[]): IMap<unknown, unknown> {
 	return IMap(keyValuePairs);
 }
 
-export function typeOf(a: unknown): Proc {
+export function typeOf(a) {
 	switch (typeof a) {
 		case "undefined":
 			return NilConstructor;
@@ -176,31 +164,29 @@ export function typeOf(a: unknown): Proc {
 			if (isMap(a)) {
 				return MapConstructor;
 			}
-			let jsConstructor = (a as any).constructor;
+			let jsConstructor = a.constructor;
 			let constructor = JsConstructorToConstructor.get(jsConstructor);
 			if (typeof constructor === "undefined") {
-				constructor = (...args: unknown[]) => new jsConstructor(...args);
+				constructor = (...args) => new jsConstructor(...args);
 				JsConstructorToConstructor.set(jsConstructor, constructor);
 			}
 			return constructor;
 	}
 	throw new Error(`Could not take the type of ${a}`);
 }
-typeOf[Special.name] = "type-of";
 
-export function jsTypeToType(jsConstructor: any): Proc {
+export function jsTypeToType(jsConstructor) {
 	let constructor = JsConstructorToConstructor.get(jsConstructor);
 	if (typeof constructor === "undefined") {
-		constructor = (...args: unknown[]) => new jsConstructor(...args);
+		constructor = (...args) => new jsConstructor(...args);
 		JsConstructorToConstructor.set(jsConstructor, constructor);
 	}
 	return constructor;
 }
-jsTypeToType[Special.name] = "js-type-to-type";
 
-export function typeName(type: unknown): Str {
+export function typeName(type) {
 	if (typeof type === "object" && type !== null) {
-		const anyType = type as any;
+		const anyType = type;
 		const name = anyType[Special.name] ?? anyType.name;
 		if (typeof name === "string") {
 			return name;
@@ -208,18 +194,17 @@ export function typeName(type: unknown): Str {
 	}
 	throw new Error(`Cannot find type-name of non type: ${print(type)}!`);
 }
-typeName[Special.name] = "type-name";
 
-export function assertType<T>(type: unknown, a: unknown): asserts a is T {
+export function assertType(type, a) {
 	if (type !== typeOf(a)) {
 		throw new Error(`Expected type: ${typeName(type)}, but received: ${a}!`);
 	}
 }
-assertType[Special.name] = "assert-type";
 
-const JsConstructorToConstructor: Map<Function, Proc> = new Map();
+const JsConstructorToConstructor = new Map();
 
 JsConstructorToConstructor.set(Keyword, KeywordConstructor);
+
 JsConstructorToConstructor.set(MultiProc, MultiProcConstructor);
 
 export const ErrorConstructor = jsTypeToType(Error);
@@ -236,13 +221,13 @@ export const first = new MultiProc("first", unaryTypeArgs);
 export const rest = new MultiProc("rest", unaryTypeArgs);
 export const isEmpty = new MultiProc("empty?", unaryTypeArgs);
 
-function defHashHook(type: unknown, impl: Proc): void {
+function defHashHook(type, impl) {
 	if (typeof type === "function") {
 		const jsConstructor = type[Special.jsConstructor];
 		if (typeof jsConstructor === "function") {
 			type = jsConstructor;
 		}
-		(type as any).hashCode = function (): unknown {
+		type.hashCode = function () {
 			return impl(this);
 		};
 	}
@@ -251,13 +236,13 @@ function defHashHook(type: unknown, impl: Proc): void {
 
 export const hash = new MultiProc("#", unaryTypeArgs, defHashHook);
 
-function defEqHook(type: unknown, impl: Proc): void {
+function defEqHook(type, impl) {
 	if (typeof type === "function") {
 		const jsConstructor = type[Special.jsConstructor];
 		if (typeof jsConstructor === "function") {
 			type = jsConstructor;
 		}
-		(type as any).equals = function (other: unknown): unknown {
+		type.equals = function (other) {
 			return impl(this, other);
 		};
 	}

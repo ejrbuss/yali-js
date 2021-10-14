@@ -1,6 +1,6 @@
 import { List as IList } from "immutable";
 import { Keyword } from "./keyword.js";
-import { Scanner, SourceRef } from "./scanner.js";
+import { Scanner } from "./scanner.js";
 import { ConstructorSymbols, Special, SpecialForms } from "./symbols.js";
 
 export class IncompleteForm extends SyntaxError {}
@@ -10,10 +10,10 @@ const ReString = /^"((\\.)|[^"])*"/;
 const ReSymbol = /^[^\s#;\(\)\[\]\{\}"]+/;
 const ReNumber = /^[+-]?(\d+|\.\d+|\d+\.\d+|\d+\.)(e[+-]?\d+)?$/;
 
-export function read(source: string, file = "<anonymous>"): IList<unknown> {
+export function read(source, file = "<anonymous>") {
 	const scanner = new Scanner(source, file);
 
-	function readForm(): unknown {
+	function readForm() {
 		scanner.scanRegexp(ReWhitepsace);
 		if (scanner.scanString("(")) {
 			return readForms(")");
@@ -36,7 +36,7 @@ export function read(source: string, file = "<anonymous>"): IList<unknown> {
 		if (scanner.scanString(",")) {
 			return IList.of(SpecialForms.Unquote, readForm());
 		}
-		let match: SourceRef | undefined;
+		let match;
 		if ((match = scanner.scanRegexp(ReString))) {
 			// JSON.parse does not handle multi-line string
 			// so we need to escape them
@@ -66,8 +66,8 @@ export function read(source: string, file = "<anonymous>"): IList<unknown> {
 		);
 	}
 
-	function readForms(terminator: string): IList<unknown> {
-		const formsArray: unknown[] = [];
+	function readForms(terminator) {
+		const formsArray = [];
 		const here = scanner.here();
 		for (;;) {
 			scanner.scanRegexp(ReWhitepsace);
@@ -86,7 +86,7 @@ export function read(source: string, file = "<anonymous>"): IList<unknown> {
 		}
 	}
 
-	let formsArray: unknown[] = [];
+	let formsArray = [];
 	for (;;) {
 		scanner.scanRegexp(ReWhitepsace);
 		if (scanner.isDone()) {

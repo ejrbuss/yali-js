@@ -3,7 +3,7 @@ import { Keyword } from "../src/keyword.js";
 import { read } from "../src/reader.js";
 import { test } from "./test.js";
 
-function testRead(name: string, source: string, expected: unknown) {
+function testRead(name, source, expected) {
 	test(name, () => {
 		let forms = read(source, name);
 		let actual = forms.toJS();
@@ -13,7 +13,6 @@ function testRead(name: string, source: string, expected: unknown) {
 
 const S = Symbol.for;
 const K = Keyword.for;
-
 testRead("Nil literal", "nil", [undefined]);
 testRead("Bool literal", "true false", [true, false]);
 testRead("Integer literal", "1234 +1 -77777", [1234, +1, -77777]);

@@ -2,6 +2,7 @@ import { createInterface } from "readline";
 import { applyCode, FgMagenta } from "./ansi.js";
 import { DefaultColors, print } from "./printer.js";
 import { IncompleteForm, read } from "./reader.js";
+import { fileURLToPath } from "url";
 
 const Prompt = applyCode(FgMagenta, "> ");
 const ContinuePrompt = "..  ";
@@ -12,11 +13,13 @@ export async function repl() {
 		input: process.stdin,
 		output: process.stdout,
 	});
-	async function prompt(): Promise<String> {
+
+	async function prompt() {
 		return new Promise((resolve) =>
 			readline.question(input.length ? ContinuePrompt : Prompt, resolve)
 		);
 	}
+
 	let input = "";
 	let sequentialErrors = 0;
 	while (sequentialErrors < MaxSequentialErrors) {
@@ -36,4 +39,6 @@ export async function repl() {
 	readline.close();
 }
 
-repl();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+	repl();
+}

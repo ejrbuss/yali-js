@@ -17,26 +17,26 @@ const Dirname = dirname(fileURLToPath(import.meta.url));
 
 let passes = 0;
 
-const Fails: [string, unknown][] = [];
-const Errors: [string, unknown][] = [];
+const Fails = [];
+const Errors = [];
 
-function printSuccess(name: string) {
+function printSuccess(name) {
 	console.log(applyCode(FgGreen, ` ✔ ${name}`));
 }
 
-function printFail(name: string, error: unknown) {
+function printFail(name, error) {
 	console.log(applyCode(FgRed, ` ✘ ${name}\n`));
 	console.log(error);
 	console.log();
 }
 
-function printError(name: string, error: unknown) {
+function printError(name, error) {
 	console.log(applyCode(FgYellow, ` ✘ ${name}\n`));
 	console.log(error);
 	console.log();
 }
 
-export function test(name: string, testFunction: Function) {
+export function test(name, testFunction) {
 	try {
 		testFunction();
 		passes += 1;
@@ -72,21 +72,18 @@ export async function testMain() {
 			process.exit(1);
 		}
 	}
-
 	if (Fails.length > 0) {
 		console.log(`\n${header} Test failures\n`);
 		for (const [name, error] of Fails) {
 			printFail(name, error);
 		}
 	}
-
 	if (Errors.length > 0) {
 		console.log(`\n${header} Test errors\n`);
 		for (const [name, error] of Errors) {
 			printError(name, error);
 		}
 	}
-
 	let passesText = applyCode(FgGreen, passes);
 	let failsText = applyCode(FgRed, Fails.length);
 	let errorsText = applyCode(FgYellow, Errors.length);
@@ -95,4 +92,6 @@ export async function testMain() {
 	);
 }
 
-testMain();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+	testMain();
+}

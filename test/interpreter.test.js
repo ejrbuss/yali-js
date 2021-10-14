@@ -4,11 +4,11 @@ import { Interpreter } from "../src/interpreter.js";
 import { read } from "../src/reader.js";
 import { test } from "./test.js";
 
-export function testInterp(name: string, source: string, expected: string) {
+export function testInterp(name, source, expected) {
 	test(name, async () => {
 		let interpreter = new Interpreter({});
 		let forms = read(source, name);
-		let actual: unknown;
+		let actual;
 		for (let form of forms) {
 			actual = interpreter.interp(form);
 		}

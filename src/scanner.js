@@ -1,38 +1,33 @@
 export class SourceRef {
-	file: string;
-	source: string;
-	position: number;
-	length: number;
-
-	constructor(file: string, source: string, position: number, length: number) {
+	constructor(file, source, position, length) {
 		this.file = file;
 		this.source = source;
 		this.position = position;
 		this.length = length;
 	}
 
-	image(): string {
+	image() {
 		return this.source.substr(this.position, this.length);
 	}
 
-	upto(): string {
+	upto() {
 		return this.source.substr(0, this.position + this.length);
 	}
 
-	remaining(): string {
+	remaining() {
 		return this.source.substr(this.position + this.length);
 	}
 
-	lineNum(): number {
+	lineNum() {
 		return this.upto().split("\n").length;
 	}
 
-	colNum(): number {
+	colNum() {
 		const lines = this.upto().split("\n");
 		return (lines[lines.length - 1] ?? "").length;
 	}
 
-	printInContext(linesOfContext: number = 3): string {
+	printInContext(linesOfContext = 3) {
 		const lineNum = this.lineNum();
 		const colNum = this.colNum();
 		const start = Math.max(lineNum - 1 - linesOfContext, 0);
@@ -46,27 +41,22 @@ export class SourceRef {
 				return `${formattedLineNum} | ${line}`;
 			});
 		const underline = " ".repeat(7 + colNum) + "^".repeat(this.length);
-
 		return `${this.toString()}\n${lines.join("\n")}\n${underline}`;
 	}
 
-	toString(): string {
+	toString() {
 		return `${this.file}:${this.lineNum()}:${this.colNum()}`;
 	}
 }
 
 export class Scanner {
-	source: string;
-	file: string;
-	position: number;
-
-	constructor(source: string, file: string) {
+	constructor(source, file) {
 		this.source = source;
 		this.file = file;
 		this.position = 0;
 	}
 
-	isDone(): boolean {
+	isDone() {
 		return this.position >= this.source.length;
 	}
 
@@ -74,7 +64,7 @@ export class Scanner {
 		return new SourceRef(this.file, this.source, this.position, 1);
 	}
 
-	scanString(string: string): SourceRef | undefined {
+	scanString(string) {
 		if (this.source.startsWith(string, this.position)) {
 			const length = string.length;
 			const sourceRef = new SourceRef(
@@ -88,7 +78,7 @@ export class Scanner {
 		}
 	}
 
-	scanRegexp(regexp: RegExp): SourceRef | undefined {
+	scanRegexp(regexp) {
 		let match = regexp.exec(this.remaining());
 		if (match && match.index === 0) {
 			const length = match[0].length;

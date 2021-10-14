@@ -3,7 +3,7 @@ import { print } from "../src/printer.js";
 import { read } from "../src/reader.js";
 import { test } from "./test.js";
 
-function testPrint(name: string, source: string, expected: string) {
+function testPrint(name, source, expected) {
 	test(name, () => {
 		let forms = read(source, name);
 		let actual = print(forms);

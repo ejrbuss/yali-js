@@ -1,9 +1,11 @@
 export class Keyword {
-	static KeywordCache: { [name: string]: Keyword | undefined } = {};
+	static KeywordCache = {};
 
-	name: string;
+	constructor(name) {
+		this.name = name;
+	}
 
-	static for(name: string): Keyword {
+	static for(name) {
 		const cache = Keyword.KeywordCache;
 		let keyword = cache[name];
 		if (typeof keyword !== "undefined") {
@@ -12,9 +14,5 @@ export class Keyword {
 		keyword = new Keyword(name);
 		cache[name] = keyword;
 		return keyword;
-	}
-
-	private constructor(name: string) {
-		this.name = name;
 	}
 }

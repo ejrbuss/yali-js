@@ -13,7 +13,7 @@ const keyword = Keyword.for("keyword");
 const punc = Keyword.for("punc");
 const poundStr = Keyword.for("pound-str");
 
-export const DefaultColors: IMap<Keyword, string> = IMap([
+export const DefaultColors = IMap([
 	[Keyword.for("nil"), FgRed],
 	[Keyword.for("bool"), FgRed],
 	[Keyword.for("num"), FgYellow],
@@ -24,14 +24,9 @@ export const DefaultColors: IMap<Keyword, string> = IMap([
 	[Keyword.for("#string"), FgBlue],
 ]);
 
-export function print(
-	form: unknown,
-	colors: IMap<Keyword, string> = IMap()
-): string {
-	function applyColor(keyword: Keyword, s: string) {
-		return colors.has(keyword)
-			? applyCode(colors.get(keyword) as string, s)
-			: s;
+export function print(form, colors = IMap()) {
+	function applyColor(keyword, s) {
+		return colors.has(keyword) ? applyCode(colors.get(keyword), s) : s;
 	}
 	if (typeof form === "undefined") {
 		return applyColor(nil, "nil");
@@ -74,11 +69,8 @@ export function print(
 	return applyColor(poundStr, `#<js::${form}>`);
 }
 
-export function printTag(
-	[first, ...rest]: TemplateStringsArray,
-	...subs: unknown[]
-): string {
-	return subs.reduce((acc: string, sub, i) => {
+export function printTag([first, ...rest], ...subs) {
+	return subs.reduce((acc, sub, i) => {
 		return acc + print(sub) + rest[i];
 	}, first);
 }

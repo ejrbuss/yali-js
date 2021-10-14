@@ -2,14 +2,14 @@ import { isList } from "immutable";
 import { isMap } from "util/types";
 import { first, isEmpty, rest } from "./types.js";
 
-export function* firstRestGen(xs: unknown) {
+export function* firstRestGen(xs) {
 	while (isEmpty.dispatch(xs)) {
 		yield first.dispatch(xs);
 		xs = rest.dispatch(xs);
 	}
 }
 
-export function toJsIter(a: unknown): Iterable<unknown> {
+export function toJsIter(a) {
 	if (isList(a) || isMap(a) || Array.isArray(a)) {
 		return a;
 	}
