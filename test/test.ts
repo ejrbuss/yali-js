@@ -26,13 +26,13 @@ function printSuccess(name: string) {
 
 function printFail(name: string, error: unknown) {
 	console.log(applyCode(FgRed, ` ✘ ${name}\n`));
-	console.error(error);
+	console.log(error);
 	console.log();
 }
 
 function printError(name: string, error: unknown) {
 	console.log(applyCode(FgYellow, ` ✘ ${name}\n`));
-	console.error(error);
+	console.log(error);
 	console.log();
 }
 
@@ -68,7 +68,7 @@ export async function testMain() {
 			await import(`./${basename}`);
 		} catch (error) {
 			console.log();
-			console.error(error);
+			console.log(error);
 			process.exit(1);
 		}
 	}
