@@ -1,14 +1,23 @@
-import { isList, isMap, List as IList, List, Map as IMap } from "immutable";
+import {
+	isList,
+	isMap,
+	hash as ihash,
+	List as IList,
+	List,
+	Map as IMap,
+} from "immutable";
 import { Keyword } from "./keyword.js";
-import { print } from "./printer.js";
+import { print, printTag } from "./printer.js";
 import { Special } from "./symbols.js";
 
-export class MultiProc {
-	constructor(name, typeArgsShape, defHook) {
+export class Interface {
+	constructor(name, typeArgsShape, fallback, defHook) {
 		this[Special.name] = name;
 		this.methodTable = IMap();
 		this.typeArgsShape = typeArgsShape;
+		this.fallback = fallback;
 		this.defHook = defHook ?? (() => {});
+		this.dispatch = this.dispatch.bind(this);
 	}
 
 	signature() {
@@ -16,7 +25,14 @@ export class MultiProc {
 	}
 
 	defMethod(typeArgs, impl) {
-		throw new Error("TODO");
+		assertType(ListConstructor, typeArgs);
+		if (typeArgs.size !== this.typeArgsShape.size) {
+			const method = this.typeArgsToMethodSignature(typeArgs);
+			throw new Error(
+				printTag`Cannot define method ${method} as it does not conform to the signature ${this.signature()}!`
+			);
+		}
+		this.methodTable = this.methodTable.set(typeArgs, impl);
 	}
 
 	getMethod(typeArgs) {
@@ -24,20 +40,24 @@ export class MultiProc {
 	}
 
 	dispatch(...args) {
-		const typeArgs = IList(args.map(typeOf));
+		const typeArgs = IList(args.slice(0, this.typeArgsShape.size).map(typeOf));
 		const impl = this.methodTable.get(typeArgs);
 		if (typeof impl !== "undefined") {
 			return impl(...args);
 		}
-		const signature = typeArgs
-			.map(typeName)
-			.unshift(this[Special.name])
-			.join(" ");
+		if (this.fallback) {
+			return this.fallback(...args);
+		}
+		const method = this.typeArgsToMethodSignature(typeArgs);
 		throw new Error(
-			`The method (${signature}) is not implemented for arguments: ${print(
-				IList(args)
+			printTag`The method ${method} is not implemented for arguments: ${IList(
+				args
 			)}!`
 		);
+	}
+
+	typeArgsToMethodSignature(typeArgs) {
+		return typeArgs.map(typeName).unshift(this[Special.name]).map(Symbol.for);
 	}
 }
 
@@ -45,11 +65,11 @@ export function NilConstructor() {
 	return;
 }
 
-export function BoolConstructor(a) {
+export function BoolConstructor(a, ...rest) {
 	if (typeof a === "boolean") {
 		return a;
 	}
-	const converted = toBool.dispatch(a);
+	const converted = toBool.dispatch(a, ...rest);
 	if (typeof converted === "boolean") {
 		return converted;
 	}
@@ -60,11 +80,18 @@ export function BoolConstructor(a) {
 	);
 }
 
-export function NumConstructor(a) {
+export function NumConstructor(a, base, ...rest) {
 	if (typeof a === "number") {
 		return a;
 	}
-	const converted = toNum.dispatch(a);
+	if (typeof a === "string") {
+		if (typeof base === "number") {
+			return parseInt(a, base);
+		} else {
+			return parseFloat(a);
+		}
+	}
+	const converted = toNum.dispatch(a, base, ...rest);
 	if (typeof converted === "number") {
 		return converted;
 	}
@@ -81,8 +108,7 @@ export function StrConstructor(...args) {
 			if (typeof a === "string") {
 				return a;
 			}
-			const convert = toStr.getMethod(IList.of(typeOf(a))) ?? print;
-			const converted = convert(a);
+			const converted = toStr.dispatch(a);
 			if (typeof converted === "string") {
 				return converted;
 			}
@@ -121,7 +147,7 @@ export function ProcConstructor(a) {
 		return a;
 	}
 	const converted = toProc.dispatch(a);
-	if (typeof converted === "function") {
+	if (typeof converted === "function" || (a && a instanceof Interface)) {
 		return converted;
 	}
 	throw new Error(
@@ -131,8 +157,8 @@ export function ProcConstructor(a) {
 	);
 }
 
-export function MultiProcConstructor(a) {
-	assertType(MultiProcConstructor, a);
+export function InterfaceConstructor(a) {
+	assertType(InterfaceConstructor, a);
 	return a;
 }
 
@@ -217,18 +243,23 @@ const JsConstructorToConstructor = new Map();
 
 JsConstructorToConstructor.set(Keyword, KeywordConstructor);
 
-JsConstructorToConstructor.set(MultiProc, MultiProcConstructor);
+JsConstructorToConstructor.set(Interface, InterfaceConstructor);
 
 const unaryTypeArgs = List.of(Symbol.for("a"));
 const binaryTypeArgs = List.of(Symbol.for("a"), Symbol.for("b"));
 
-export const toBool = new MultiProc("to-Bool", unaryTypeArgs);
-export const toNum = new MultiProc("to-Num", unaryTypeArgs);
-export const toStr = new MultiProc("to-Str", unaryTypeArgs);
-export const toProc = new MultiProc("to-Proc", unaryTypeArgs);
-export const first = new MultiProc("first", unaryTypeArgs);
-export const rest = new MultiProc("rest", unaryTypeArgs);
-export const isEmpty = new MultiProc("empty?", unaryTypeArgs);
+export const toBool = new Interface("to-Bool", unaryTypeArgs);
+export const toNum = new Interface("to-Num", unaryTypeArgs);
+export const toStr = new Interface("to-Str", unaryTypeArgs, (s) => print(s));
+export const toProc = new Interface("to-Proc", unaryTypeArgs);
+export const first = new Interface("first", unaryTypeArgs);
+export const rest = new Interface("rest", unaryTypeArgs);
+export const count = new Interface("count", unaryTypeArgs);
+export const isEmpty = new Interface(
+	"empty?",
+	unaryTypeArgs,
+	(xs) => count.dispatch(xs) === 0
+);
 
 function defHashHook(type, impl) {
 	if (typeof type === "function") {
@@ -243,7 +274,12 @@ function defHashHook(type, impl) {
 	throw new Error(`Could not hook hashCode for type ${print(type)}!`);
 }
 
-export const hash = new MultiProc("#", unaryTypeArgs, defHashHook);
+export const hash = new Interface(
+	"#",
+	unaryTypeArgs,
+	(a) => a.hash,
+	defHashHook
+);
 
 function defEqHook(type, impl) {
 	if (typeof type === "function") {
@@ -258,4 +294,9 @@ function defEqHook(type, impl) {
 	throw new Error(`Could not hook equals for type ${print(type)}!`);
 }
 
-export const BinaryEq = new MultiProc("binary=", binaryTypeArgs, defEqHook);
+export const BinaryEq = new Interface(
+	"binary=",
+	binaryTypeArgs,
+	(a, b) => a === b,
+	defEqHook
+);

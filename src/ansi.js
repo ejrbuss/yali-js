@@ -22,12 +22,6 @@ export const BgMagenta = "\x1b[45m";
 export const BgCyan = "\x1b[46m";
 export const BgWhite = "\x1b[47m";
 
-let enabled = true;
-
-export function setEnabledd(e) {
-	enabled = e;
-}
-
 export function applyCode(code, content) {
-	return enabled ? `${code}${content}${Reset}` : `${content}`;
+	return `${code}${content}${Reset}`;
 }

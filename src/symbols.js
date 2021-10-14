@@ -24,9 +24,10 @@ export const SpecialForms = {
 	Try: Symbol.for("try"),
 	Catch: Symbol.for("catch"),
 	Let: Symbol.for("let"),
+	Match: Symbol.for("match"),
 	Proc: Symbol.for("proc"),
 	Macro: Symbol.for("macro"),
-	MultiProc: Symbol.for("multi-proc"),
+	Interface: Symbol.for("interface"),
 	MacroExpand: Symbol.for("macro-expand"),
 	Quote: Symbol.for("quote"),
 	QuasiQuote: Symbol.for("quasi-quote"),
@@ -35,4 +36,5 @@ export const SpecialForms = {
 	Splice: Symbol.for("..."),
 	Async: Symbol.for("async"),
 	Await: Symbol.for("await"),
+	Type: Symbol.for("type"), // todo
 };

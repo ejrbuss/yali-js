@@ -59,14 +59,14 @@ export function print(form, colors = IMap()) {
 	}
 	if (typeof form === "function") {
 		let name = form[Special.name] ?? form.name ?? "anonymous";
-		return applyColor(poundStr, `#<proc::${name}>`);
+		return applyColor(poundStr, `#<${name}::proc>`);
 	}
 	if (typeof form === "object" && form !== null) {
 		let name = form[Special.name] ?? "";
 		let type = form.constructor[Special.name] ?? form.constructor.name;
-		return applyColor(poundStr, `#<${type}::${name}>`);
+		return applyColor(poundStr, `#<${name}::${type}>`);
 	}
-	return applyColor(poundStr, `#<js::${form}>`);
+	return applyColor(poundStr, `#<js"${form}">`);
 }
 
 export function printTag([first, ...rest], ...subs) {

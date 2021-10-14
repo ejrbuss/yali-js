@@ -33,9 +33,9 @@ testInterp("Num literal", "14.5", "14.5");
 testInterp("Keyword literal", ":x", ":x");
 testInterp("Str literal", '"test\n"', '"test\n"');
 testInterp("List constructor", "[1 2 3]", "(1 2 3)");
-testInterp("One plus one", "(Num+ 1 1)", "2");
-testInterp("Add spread list", "(Num+ ... [3 4])", "7");
-testInterp("Add spread map", '(Num+ "x" ... { 1 2 })', '"x1,2"');
+testInterp("One plus one", "(js+ 1 1)", "2");
+testInterp("Add spread list", "(js+ ... [3 4])", "7");
+testInterp("Add spread map", '(js+ "x" ... { 1 2 })', '"x1,2"');
 testInterp("Basic Str conversion", '(Str nil "x" :x 3)', '"nilx:x3"');
 testInterp("Def variable", "(def x 4) x", "4");
 testInterp("Def chain", "(def x 42) (def y x) y", "42");
@@ -47,7 +47,7 @@ testInterp("Let single binding 2", "(def x 4) (let (y [x x]) y)", "(4 4)");
 testInterp("Let shadow binding", "(def x 4) (let (x 2) x)", "2");
 testInterp(
 	"Let multi binding",
-	"(let (x 1 y 2 z 3) (def s (Num+ x y)) (Num+ s z))",
+	"(let (x 1 y 2 z 3) (def s (js+ x y)) (js+ s z))",
 	"6"
 );
 testInterp(
@@ -63,7 +63,7 @@ testInterp(
 testInterp("Let list binding 3", "(let ([x] {:x 4 :y 5}) x)", "(:x 4)");
 testInterp(
 	"Let list binding 4",
-	"(let ([[x] ... rest] [[1 2 3] 0 -1]) (Num+ rest x))",
+	"(let ([[x] ... rest] [[1 2 3] 0 -1]) (js+ rest x))",
 	'"List [ 0, -1 ]1"'
 );
 testInterp("Let map binding 1", "(let ({ :x x } {:x 4}) x)", "4");
@@ -73,7 +73,7 @@ testInterp(
 	'"nil:z"'
 );
 testInterp("Proc identity", "((proc (x) x) 4)", "4");
-testInterp("Proc square", "((proc (x) (def y x) (Num* y y)) 5)", "25");
+testInterp("Proc square", "((proc (x) (def y x) (js* y y)) 5)", "25");
 testInterp(
 	"Proc destructirng 1",
 	"((proc (x y ... rest) rest) ... [:x :y 1 2 3])",
@@ -81,7 +81,7 @@ testInterp(
 );
 testInterp(
 	"Recur basic",
-	"(def f (proc (x n) (if x (recur (f false (Num+ n 1))) n))) (f true 3)",
+	"(def f (proc (x n) (if x (recur (f false (js+ n 1))) n))) (f true 3)",
 	"4"
 );
 testInterp(
@@ -122,7 +122,7 @@ testInterp(
 );
 testInterp(
 	"Eval can define",
-	'(def e env) (eval "(def x 4)" e) (js-get e \'x)',
+	'(def e env) (eval "(def x 4)" e) (get-property e \'x)',
 	"4"
 );
 

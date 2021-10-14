@@ -38,7 +38,7 @@ export class SourceRef {
 			.map((line, i) => {
 				let lineNum = `${i + start + 1}`;
 				let formattedLineNum = " ".repeat(5 - lineNum.length) + lineNum;
-				return `${formattedLineNum} | ${line}`;
+				return `${formattedLineNum} | ${line.replace(/\t/g, " ")}`;
 			});
 		const underline = " ".repeat(7 + colNum) + "^".repeat(this.length);
 		return `${this.toString()}\n${lines.join("\n")}\n${underline}`;

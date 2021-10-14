@@ -1,27 +1,236 @@
-(def global-env (env))
+(def *global-env* (env))
 
 ;; temporary and bad
 (def reload (proc ()
-	(eval (read-file "./src/prelude.yali" "utf-8") global-env)))
+	(eval (read-file "./src/prelude.yali" "utf-8") *global-env*)))
+
+(def log (proc (... args)
+	(for-each (proc (a)
+			(write-stdout a)
+			(write-stdout " "))
+		args)
+	(write-stdout "\n")
+	nil))
+
+;; Bootsrap basic list operations
+
+(bind-call-property first "defMethod" [List]
+	(proc (list)
+		(bind-call-property list "first")))
+
+(bind-call-property rest "defMethod" [List]
+	(proc (list)
+		(bind-call-property list "rest")))
+
+(bind-call-property count "defMethod" [List]
+	(proc (list)
+		(get-property list "size")))
+
+(bind-call-property empty? "defMethod" [List]
+	(proc (list)
+		(bind-call-property list "isEmpty")))
 
 ;; Basic macros
 
 (def def-macro (macro (signature ... body)
 	(let (
-		name (List-first signature)
-		params (List-rest signature))
+		name (first signature)
+		params (rest signature))
 		`(def ,name (macro ,params ,,, body)))))
 
 (def-macro (def-proc signature ... body)
 	(let (
-		name (List-first signature)
-		params (List-rest signature))
+		name (first signature)
+		params (rest signature))
 		`(def ,name (proc ,params ,,, body))))
 
-(def-macro (def-multi signature)
+(def-macro (def-interface signature fallback)
 	(let (
-		name (List-first signature))
-		`(def ,name (multi-proc ,signature))))
+		name (first signature))
+		`(def ,name (interface ,signature ,fallback))))
 
-(def-macro (\ ... body)
-	`(proc (_) ,body))
+(def-macro (def-method [interface ... type-args] impl)
+	`(bind-call-property ,interface "defMethod" [,,,type-args] ,impl))
+
+;; TODO fallthrouuugh should result in error, not nil!
+(def-macro (def-macros ... defs)
+	(def-proc (def-to-case def)
+		;; todo assert names match
+		(let (
+			[sig body] def
+			binding [`List ... (rest sig)])
+			`(,binding ,body)))
+	(let (
+		name (first (first defs))
+		cases (flatten (map def-to-case (chunk 2 defs))))
+		`(def-macro (,name ... args) (match args ,,, cases))))
+
+;; TODO fallthrouuugh should result in error, not nil!
+(def-macro (def-procs ... defs)
+	(def-proc (def-to-case def)
+		;; todo assert names match
+		(let (
+			[sig body] def
+			binding [`List ... (rest sig)])
+			`(,binding ,body)))
+	(let (
+		name (first (first defs))
+		cases (flatten (map def-to-case (chunk 2 defs))))
+		`(def-proc (,name ... args) (match args ,,, cases))))
+
+;; (def-macro (~ ... args)
+;; 	(def-proc (inner form n)
+;; 		(List?)
+
+(def-macros
+	(and) true
+	(and a) a
+	(and a b) (if a b a)
+	(and a ... rest) (if a (and ... rest) a))
+
+(def-macros
+	(or) false
+	(or a) a
+	(or a b) (if a a b)
+	(or a ... rest) (if a a (or ... rest)))
+
+(def-macros
+	(cond) nil
+	(cond condition body) `(if ,condition ,body)
+	(cond condition body ... more) `(if ,condition ,body ,((id cond) ... more)))
+
+;; basic functions
+
+(def-proc (id a) a)
+
+(def-proc (not a)
+	(if a false true))
+
+(def-procs
+	(. f) f
+	(. f g) (proc (... args) (f (g ... args)))
+	(. f ... gs) (proc (... args) (f ((. ... gs) ... args))))
+
+(def-proc (Nil? a) (binary= nil a))
+(def-proc (Bool? a) (binary= "boolean" (js-type-of a)))
+(def-proc (Str? a) (binary= "string" (js-type-of a)))
+(def-proc (Sym? a) (binary= "symbol" (js-type-of)))
+(def-proc (Keyword? a) (binary= Keyword (type-of a)))
+(def-proc (List? a) (binary= List (type-of a)))
+(def-proc (Map? a) (binary= Map (type-of a)))
+(def-proc (Proc? a) (binary= "function" (js-type-of)))
+(def-proc (Interface? a) (binary= Interface (type-of a)))
+
+;; proc methods
+
+(def-method (to-Proc Interface) (proc (i)
+	(get-property i "dispatch")))
+
+;; nil methods
+
+(def-method (to-Bool Nil) (proc () false))
+(def-method (to-Str Nil) (proc () ""))
+
+;; numeric operators
+
+(def-interface (inc a))
+(def-interface (dec a))
+
+(def-method (inc Num) (proc (a) (js+ a 1)))
+(def-method (dec Num) (proc (a) (js- a 1)))
+
+(def-interface (unary+ a))
+(def-interface (binary+ a b))
+
+(def-method (unary+ Num) id)
+(def-method (binary+ Num Num) js+)
+
+(def-procs
+	(+) 0
+	(+ a) (unary+ a)
+	(+ a b) (binary+ a b)
+	(+ a ... rest) (reduce binary+ a rest))
+
+(def-interface (unary- a))
+(def-interface (binary- a b))
+
+(def-method (unary- Num) js-neg)
+(def-method (binary- Num Num) js-)
+
+(def-procs
+	(-) 0
+	(- a) (unary- a)
+	(- a b) (binary- a b)
+	(- a ... rest) (reduce binary- a rest))
+
+(def-interface (unary* a))
+(def-interface (binary* a b))
+
+(def-method (unary* Num) id)
+(def-method (binary* Num Num) js*)
+
+(def-procs
+	(*) 1
+	(* a) (unary* a)
+	(* a b) (binary* a b)
+	(* a ... rest) (reduce binary* a rest))
+
+(def-interface (unary/ a))
+(def-interface (binary/ a b))
+
+(def-method (unary/ Num) id)
+(def-method (binary/ Num Num) js/)
+
+(def-procs
+	(/) 1
+	(/ a) (unary/ a)
+	(/ a b) (binary/ a b)
+	(/ a ... rest) (reduce binary/ a rest))
+
+(def-interface (pow a b))
+
+(def-method (pow Num Num) js-pow)
+
+(def-interface (mod a b))
+
+(def-method (mod Num Num) js-mod)
+
+(def-interface (floor a))
+(def-interface (ciel a))
+(def-interface (round a))
+
+(def-method (floor Num) (proc (a) (bind-call-property js-math "floor" a)))
+(def-method (ciel Num) (proc (a) (bind-call-property js-math "ciel" a)))
+(def-method (round Num) (proc (a) (bind-call-property js-math "round" a)))
+
+(def-interface (rand a) (proc (... args)
+	;; fallback is expected for most calls
+	(if (empty? args)
+		(bind-call-property js-math "random")
+		;; todo better error handling here
+		((bind-call-property rand "getMethod" [(first args)]) ... args))))
+
+(def-method (rand Num) (proc (... args)
+	(let (
+		n (bind-call-property js-math "random"))
+		(match args
+			[] n
+			[max] (floor (* n max))
+			[min max] (floor (+ min (* n (- max min))))))))
+
+(def-method (rand List)	(proc (list)
+	(nth list (rand (count list)))))
+
+;; ordering
+
+;; iterator methods
+
+(def-interface (nth a)) ;; todo fallback
+
+(def-method (nth List) (proc (a ... args)
+	(bind-call-property a "get" ... args)))
+
+;; structural
+
+;; todo for procs and interfaces
+;; (def-proc (signature p)

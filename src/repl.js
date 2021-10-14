@@ -1,14 +1,14 @@
 import repl from "repl";
-import { applyCode, Dim, FgMagenta } from "./ansi.js";
+import { List as IList } from "immutable";
+import { applyCode, Dim } from "./ansi.js";
 import { DefaultColors, print } from "./printer.js";
 import { IncompleteForm } from "./reader.js";
 import { getInterpreter, seval } from "./builtins.js";
-import { extendEnv } from "./env.js";
 import { Special } from "./symbols.js";
-import { isList } from "immutable";
+import { toStr, typeOf } from "./types.js";
 
 const interpreter = getInterpreter();
-const replEnv = extendEnv(interpreter.globalEnv);
+const replEnv = interpreter.globalEnv.extendEnv("repl");
 
 function evalInput(input, _ctx, file, callback) {
 	try {
@@ -46,8 +46,9 @@ function writeOutput(output) {
 	return print(output, DefaultColors);
 }
 
-repl.start({
-	prompt: "> ",
+const replServer = repl.start({
 	eval: evalInput,
 	writer: writeOutput,
+	// completer: TODO
+	// preview: true,
 });
