@@ -16,6 +16,7 @@ export const ConstructorSymbols = {
 
 export const SpecialForms = {
 	Def: Symbol.for("def"),
+	Undef: Symbol.for("undef"),
 	If: Symbol.for("if"),
 	Do: Symbol.for("do"),
 	Recur: Symbol.for("recur"),

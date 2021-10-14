@@ -1,5 +1,5 @@
 import { isList, isMap, List as IList } from "immutable";
-import { extendEnv } from "./env.js";
+import { createEmptyEnv, extendEnv } from "./env.js";
 import { toJsIter } from "./iter.js";
 import { printTag } from "./printer.js";
 import { Recured } from "./recured.js";
@@ -18,14 +18,15 @@ import {
 export class Interpreter {
 	static running;
 	//
-	constructor(initialEnv) {
-		this.globalEnv = extendEnv(initialEnv);
+	constructor() {
+		this.globalEnv = createEmptyEnv();
 		this.currentEnv = this.globalEnv;
 		this.stack = [];
+		Interpreter.running = Interpreter.running ?? this;
 	}
 
 	interp(form, env) {
-		const savedRunning = Interpreter.running;
+		const savedRunning = Interpreter.running ?? this;
 		const savedStack = this.stack;
 		const savedEnv = this.currentEnv;
 		try {
@@ -206,6 +207,12 @@ export class Interpreter {
 			interpedValue[Special.name] = name.description;
 		}
 		env[name] = interpedValue;
+	}
+
+	[SpecialForms.Undef](operands, env) {
+		const name = operands[0];
+		this.wrapExternal(() => assertType(SymConstructor, name));
+		delete env[name];
 	}
 
 	[SpecialForms.If](operands, env) {

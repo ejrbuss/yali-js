@@ -1,0 +1,27 @@
+(def global-env (env))
+
+;; temporary and bad
+(def reload (proc ()
+	(eval (read-file "./src/prelude.yali" "utf-8") global-env)))
+
+;; Basic macros
+
+(def def-macro (macro (signature ... body)
+	(let (
+		name (List-first signature)
+		params (List-rest signature))
+		`(def ,name (macro ,params ,,, body)))))
+
+(def-macro (def-proc signature ... body)
+	(let (
+		name (List-first signature)
+		params (List-rest signature))
+		`(def ,name (proc ,params ,,, body))))
+
+(def-macro (def-multi signature)
+	(let (
+		name (List-first signature))
+		`(def ,name (multi-proc ,signature))))
+
+(def-macro (\ ... body)
+	`(proc (_) ,body))

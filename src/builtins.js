@@ -1,4 +1,6 @@
 import { readFileSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { List as IList } from "immutable";
 import { createEmptyEnv, extendEnv } from "./env.js";
 import { Interpreter } from "./interpreter.js";
@@ -28,8 +30,9 @@ import {
 	typeName,
 	typeOf,
 } from "./types.js";
+import { url } from "inspector";
 
-export function createBuiltinsEnv() {
+export function addBuiltins(env) {
 	const jsEnv = {
 		// type related
 		Nil: NilConstructor,
@@ -73,44 +76,65 @@ export function createBuiltinsEnv() {
 		"bitwise<<": (a, b) => a << b,
 		"bitwise>>": (a, b) => a >> b,
 		"bitwise>>>": (a, b) => a >>> b,
+		// list
+		"List-first": (a) => a.first(),
+		"List-rest": (a) => a.rest(),
+		"List-empty?": (a) => a.isEmpty(),
+		// map
 		// meta
 		read: read,
 		print: print,
 		eval: seval,
-		env: env,
+		env: () => getInterpreter().currentEnv,
 		// interop
 		"js-get": (object, property) => object[property],
 		"js-set!": (object, property, value) => (object[property] = value),
-		"js-bind": (object, property) => object[property].bind(object),
 		"js-call": (object, thisArg, ...args) => object.call(thisArg, args),
 		"js-math": Math,
 		// I/O
-		"read-file-sync": readFileSync,
-		"write-file-sync": writeFileSync,
+		"read-file": readFileSync,
+		"write-file": writeFileSync,
 		"process-args": IList(process.argv),
-		"stdout-write": (s) => process.stdout.write(StrConstructor(s)),
-		"stderr-write": (s) => process.stdout.write(StrConstructor(s)),
+		"write-stdout": (s) => {
+			process.stdout.write(StrConstructor(s));
+		},
+		"write-stderr": (s) => process.stdout.write(StrConstructor(s)),
 		exit: (code) => process.exit(code),
 		// other
 		"unique-sym": (name) => Symbol.for("#" + StrConstructor(name)),
 	};
 
 	// Assign names to all builtins
-	const builtinEnv = createEmptyEnv();
 	for (const name in jsEnv) {
 		const builtin = jsEnv[name];
-		builtinEnv[Symbol.for(name)] = builtin;
+		env[Symbol.for(name)] = builtin;
 		builtin[Special.name] = name;
 	}
-	return builtinEnv;
+	return env;
+}
+
+export function getInterpreter() {
+	if (Interpreter.running) {
+		return Interpreter.running;
+	}
+	const interpreter = new Interpreter();
+	addPrelude(addBuiltins(interpreter.globalEnv));
+	return interpreter;
+}
+
+export function addPrelude(env) {
+	const srcDir = dirname(fileURLToPath(import.meta.url));
+	const preludeFile = join(srcDir, "prelude.yali");
+	const preludeSrc = readFileSync(preludeFile, "utf-8");
+	return seval(preludeSrc, getInterpreter().globalEnv);
 }
 
 export function seval(source, env, file) {
 	assertType(StrConstructor, source);
 	file && assertType(StrConstructor, file);
-	const evalEnv = env ?? createBuiltinsEnv();
+	const interpreter = getInterpreter();
+	const evalEnv = env ?? extendEnv(interpreter.globalEnv);
 	const forms = read(source, file);
-	const interpreter = Interpreter.running ?? new Interpreter(env);
 	let result;
 	for (const form of forms) {
 		result = interpreter.interp(form, evalEnv);

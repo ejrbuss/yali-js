@@ -8,7 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "start": "node ./src/yali.js",
+    "start": "node ./src/repl.js",
     "test": "node ./test/test.js"
   },
   "repository": {

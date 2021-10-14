@@ -1,13 +1,14 @@
 import assert from "assert";
 import { isList, isMap } from "immutable";
-import { createBuiltinsEnv } from "../src/builtins.js";
+import { addBuiltins } from "../src/builtins.js";
 import { Interpreter } from "../src/interpreter.js";
 import { read } from "../src/reader.js";
 import { test } from "./test.js";
 
 export function testInterp(name, source, expected) {
 	test(name, () => {
-		let interpreter = new Interpreter(createBuiltinsEnv());
+		let interpreter = new Interpreter();
+		addBuiltins(interpreter.globalEnv);
 		let forms = read(source, name);
 		let actual;
 		for (let form of forms) {
@@ -115,8 +116,8 @@ testInterp(
 	"2"
 );
 testInterp(
-	"Eval does not read ecurrent env by default",
-	'(def x 4) (try (eval "x") 2)',
+	"Eval does not read from local env by default",
+	'(let () (def x 4) (try (eval "x") 2))',
 	"2"
 );
 testInterp(
