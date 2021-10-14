@@ -48,6 +48,4 @@ export const SpecialForms = {
 	Unquote: Symbol.for("unquote"),
 	UnquoteSplice: Symbol.for("unquote-splice"),
 	Splice: Symbol.for("..."),
-	Eval: Symbol.for("eval"),
-	Import: Symbol.for("import"),
 };

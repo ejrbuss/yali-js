@@ -42,17 +42,12 @@ export function print(form, transforms = DefaultTransforms) {
 		return transforms.Sym(form.description);
 	}
 	if (typeof form === "function") {
-		let name = form.procNamme ?? form.typeName ?? form.name ?? "anonymous";
+		let name = form.procName ?? form.typeName ?? form.name ?? "anonymous";
 		let type = form.macro ? "macro" : "proc";
 		return transforms.PoundString(`#<${type}::${name}>`);
 	}
 	if (form instanceof Keyword) {
 		return transforms.Keyword(form.toStr());
-	}
-	if (form instanceof Error) {
-		let name = form.typeName ?? form.name ?? "Error";
-		let message = form.message;
-		return transforms.PoundString(`#<${name}::${JSON.stringify(message)}>`);
 	}
 	if (isList(form)) {
 		return `${transforms.Punctuation("(")}${form

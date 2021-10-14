@@ -1,0 +1,97 @@
+;; Step 1. define basic List operations
+
+(def List-first (proc (xs)
+	(__builtin__jsGetMethod xs "first" ())
+
+(def List-last (proc (xs)
+	(__builtin__jsGetMethod xs "last" ())
+
+(def List-rest (proc (xs)
+	(__builtin__jsGetMethod xs "rest" ())
+
+(def List-count (proc (xs)
+	(__builtin__jsGetMethod xs "count" ())
+
+(def List-cons (proc (x xs)
+	(__builtin__jsGetMethod xs "first" ())
+
+(def List-push (proc (xs ... new-xs)
+	(__builtin__jsGetMethod xs "first" ())
+
+(def List-pop (proc (xs)
+	(__builtin__jsGetMethod xs "first" ())
+
+;; Step 2. define basic defining macros
+
+(def def-macro (macro (signature ... body)
+	(let (
+		name (List-first signature)
+		params (List-rest signature))
+		`(def ,name (macro ,params ,,, body)))))
+
+(def-macro (def-proc signature ... body)
+	(let (
+		name (List-first signature)
+		params (List-rest signature))
+		`(def ,name (proc ,params ,,, body))))
+
+(def-macro (\ ... body)
+	`(proc (_) ,,, body))
+
+;; Step 4. define more basic List and basic Map operations
+
+(def-proc (List-map p xs)
+	((__builtin__jsGetBoundProperty xs "map") (\ (p _))))
+
+;; Step 5. define interfaces so we can define generic operations
+
+;; Scratch
+
+(def-proc (log ... args)
+	())
+
+(async
+	(await (readline "> ")))
+
+
+(def-type (Person name age)
+	{ :name name :age age })
+
+(def-impl (Eq Person Person) (proc (p1 p2)
+	(and
+		(= (:name p1) (:name p2))
+		(= (:age p1) (:age p2)))))
+
+;; The full + implemntation
+(def-multi (binary+ a b))
+(def-multi (unary+ a)
+
+(def-method (binary+ Num Num) (proc (a b) (__add a b)))
+(def-method (unary+ Num) (proc (a) 0))
+
+(def-procs
+	(+ a) (unary+ a)
+	(+ a b) (binary+ a b)
+	(+ a ... more) (reduce binary+ a more))
+;;
+
+(def-multi (first a))
+(def-multi (rest a))
+
+(def-method (first List) (proc (a) (. a first ())))
+(def-method (rest List) (proc (a) (. a rest ())))
+
+__js-get-property
+__js-set-property
+__js-call-property
+
+(def-proc
+	;; ie tail call
+	(recur (fib 0 1))
+
+(async
+	(await async-proc))
+
+
+
+

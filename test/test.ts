@@ -1,32 +1,44 @@
 // This is a barebones test framework to keep this project dependency free
 import assert from "assert";
-import { AnsiCodes, applyCode } from "../js-src/AnsiCodes.js";
-import { exec } from "../js-src/Builtins.js";
+import { execSync } from "child_process";
+import {
+	applyCode,
+	BgGreen,
+	Bright,
+	FgBlack,
+	FgGreen,
+	FgRed,
+	FgYellow,
+} from "../src/ansi.js";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+
+const Dirname = dirname(fileURLToPath(import.meta.url));
 
 let passes = 0;
 
-const Fails = [];
-const Errors = [];
+const Fails: [string, unknown][] = [];
+const Errors: [string, unknown][] = [];
 
-function printSuccess(name) {
-	console.log(applyCode(AnsiCodes.FgGreen, ` ✔ ${name}`));
+function printSuccess(name: string) {
+	console.log(applyCode(FgGreen, ` ✔ ${name}`));
 }
 
-function printFail(name, error) {
-	console.log(applyCode(AnsiCodes.FgRed, ` ✘ ${name}\n`));
+function printFail(name: string, error: unknown) {
+	console.log(applyCode(FgRed, ` ✘ ${name}\n`));
 	console.error(error);
 	console.log();
 }
 
-function printError(name, error) {
-	console.log(applyCode(AnsiCodes.FgYellow, ` ✘ ${name}\n`));
+function printError(name: string, error: unknown) {
+	console.log(applyCode(FgYellow, ` ✘ ${name}\n`));
 	console.error(error);
 	console.log();
 }
 
-export async function test(name, testFunction) {
+export function test(name: string, testFunction: Function) {
 	try {
-		await testFunction();
+		testFunction();
 		passes += 1;
 		printSuccess(name);
 	} catch (error) {
@@ -40,15 +52,15 @@ export async function test(name, testFunction) {
 	}
 }
 
-export async function main() {
-	let header = applyCode(
-		AnsiCodes.FgBlack + AnsiCodes.Bright + AnsiCodes.BgGreen,
-		" TEST "
-	);
-	let testFiles = (await exec(`find ./js-test/**.js`)).trim().split("\n");
+export async function testMain() {
+	let header = applyCode(FgBlack + Bright + BgGreen, " TEST ");
+	let testFiles = execSync(`find ${Dirname}/**.js`)
+		.toString()
+		.trim()
+		.split("\n");
 	for (const testFile of testFiles) {
 		try {
-			const basename = testFile.replace(/^\.\/js-test\//, "");
+			const basename = testFile.replace(Dirname, "");
 			if (basename === "Test.js") {
 				continue;
 			}
@@ -75,12 +87,12 @@ export async function main() {
 		}
 	}
 
-	let passesText = applyCode(AnsiCodes.FgGreen, passes);
-	let failsText = applyCode(AnsiCodes.FgRed, Fails.length);
-	let errorsText = applyCode(AnsiCodes.FgYellow, Errors.length);
+	let passesText = applyCode(FgGreen, passes);
+	let failsText = applyCode(FgRed, Fails.length);
+	let errorsText = applyCode(FgYellow, Errors.length);
 	console.log(
 		`\n${header} Passes: ${passesText} Fails: ${failsText} Errors: ${errorsText}\n`
 	);
 }
 
-main();
+testMain();

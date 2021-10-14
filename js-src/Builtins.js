@@ -6,6 +6,9 @@ import { Keyword as KeywordImpl } from "./keyword.js";
 import * as Printer from "./Printer.js";
 import * as Reader from "./Reader.js";
 
+// TODO all external functions that can throw, need to be wrapped in
+// interpreter.throwError
+
 const JsError = global.Error;
 
 const TypeOftype = {
@@ -19,7 +22,7 @@ const TypeOftype = {
 
 // Type operations
 
-export function typeOf(a) {
+export function typeOf(interpreter, a) {
 	let constructor = TypeOftype[typeof a];
 	if (typeof constructor !== "undefined") {
 		return constructor;
@@ -41,27 +44,29 @@ export function typeOf(a) {
 	}
 }
 
-export function typeName(type) {
+export function typeName(interpreter, type) {
 	if (type) {
 		return type.typeName ?? type.name;
 	}
 }
 
-export function assertType(type, a) {
-	if (type !== typeOf(a)) {
-		throw new TypeError(
-			`Expected type: ${typeName(type)}, but received: ${print(a)}!`
+export function assertType(interpreter, type, a) {
+	if (type !== typeOf(interpreter, a)) {
+		const expected = typeName(interpreter, type);
+		const actual = Printer.print(a);
+		interpreter.throwError(
+			new TypeError(`Expected type: ${expected}, but received: ${actual}!`)
 		);
 	}
 }
 
 // Primitive Type constructors
 
-export function Nil() {
+export function Nil(interpreter) {
 	return undefined;
 }
 
-export async function Bool(a) {
+export async function Bool(interpreter, a) {
 	if (typeof a === "boolean") {
 		return a;
 	}
@@ -73,17 +78,21 @@ export async function Bool(a) {
 		if (typeof converter === "function") {
 			let converted = await converter.apply(a);
 			if (typeof converted !== "boolean") {
-				throw new JsError(
-					Printer.printStr`The to-Bool conversion of ${a} did not return a Bool!`
+				interpreter.throwError(
+					new JsError(
+						Printer.printStr`The to-Bool conversion of ${a} did not return a Bool!`
+					)
 				);
 			}
 			return converted;
 		}
 	}
-	throw new JsError(Printer.printStr`Cannot convert ${a} to Bool!`);
+	interpreter.throwError(
+		new JsError(Printer.printStr`Cannot convert ${a} to Bool!`)
+	);
 }
 
-export async function Num(x) {
+export async function Num(interpreter, x) {
 	if (typeof x === "number") {
 		return x;
 	}
@@ -95,17 +104,21 @@ export async function Num(x) {
 		if (typeof converter === "function") {
 			let converted = await converter.apply(x);
 			if (typeof converted !== "number") {
-				throw new JsError(
-					Printer.printStr`The to-Num conversion of ${x} did not return a Num!`
+				interpreter.throwError(
+					new JsError(
+						Printer.printStr`The to-Num conversion of ${x} did not return a Num!`
+					)
 				);
 			}
 			return converted;
 		}
 	}
-	throw new JsError(Printer.printStr`Cannot convert ${x} to Num!`);
+	interpreter.throwError(
+		new JsError(Printer.printStr`Cannot convert ${x} to Num!`)
+	);
 }
 
-export async function Str(...xs) {
+export async function Str(interpreter, ...xs) {
 	let stringified = await Promise.all(
 		xs.map(async (x) => {
 			if (typeof x === "string") {
@@ -119,8 +132,10 @@ export async function Str(...xs) {
 				if (typeof converter === "function") {
 					let converted = await converter.apply(x);
 					if (typeof converted !== "string") {
-						throw new JsError(
-							Printer.printStr`The to-Str conversion of ${x} did not return a Str!`
+						interpreter.throwError(
+							new JsError(
+								Printer.printStr`The to-Str conversion of ${x} did not return a Str!`
+							)
 						);
 					}
 					return converted;
@@ -132,47 +147,53 @@ export async function Str(...xs) {
 	return stringified.join("");
 }
 
-export function Sym(x) {
-	let name = Str(x);
+export function Sym(interpreter, x) {
+	let name = Str(interpreter, x);
 	if (name.startsWith("#")) {
-		throw new JsError(
-			`Sym cannot have name ${name}, as # is reserved for unique symbols!`
+		interpreter.throwError(
+			new JsError(
+				`Sym cannot have name ${name}, as # is reserved for unique symbols!`
+			)
 		);
 	}
 	return Symbol.for(name);
 }
 
-export async function Keyword(x) {
-	return KeywordImpl.for(Str(x));
+export async function Keyword(interpreter, x) {
+	return KeywordImpl.for(Str(interpreter, x));
 }
 
-export async function Proc(x) {
+export async function Proc(interpreter, x) {
 	if (typeof x === "function") {
 		return x;
 	}
 	if (isList(x) || isMap(x)) {
-		return x.get.bind(x);
+		return (_interpreter, ...args) => x.get(...args);
 	}
 	if (typeof x === "object" && x !== null) {
 		let toProc = x.toProc;
 		if (typeof toProc === "function") {
 			let proc = await toProc.apply(x);
 			if (typeof proc !== "function") {
-				throw new JsError(
-					Printer.printStr`The to-Proc conversion of ${x} did not return a Proc!`
+				interpreter.throwError(
+					new JsError(
+						Printer.printStr`The to-Proc conversion of ${x} did not return a Proc!`
+					)
 				);
 			}
 			return proc;
 		}
 	}
-	throw new JsError(Printer.printStr`Cannot convert ${x} to Proc!`);
+	interpreter.throwError(
+		new JsError(Printer.printStr`Cannot convert ${x} to Proc!`)
+	);
 }
 
-export function List(...xs) {
+export function List(interpreter, ...xs) {
 	return Imut.List(xs);
 }
 
-export function Map(...xs) {
+export function Map(interpreter, ...xs) {
 	let pairs = [];
 	let length = xs.length;
 	for (let i = 0; i < length; i += 2) {
@@ -181,11 +202,11 @@ export function Map(...xs) {
 	return Imut.Map(pairs);
 }
 
-export async function Error(message) {
-	return new JsError(await Str(message));
+export async function Error(interpreter, message) {
+	return new JsError(await Str(interpreter, message));
 }
 
-export async function Iter(x) {
+export async function Iter(interpreter, x) {
 	if (isList(x) || isMap(x) || Array.isArray(x)) {
 		return x;
 	}
@@ -201,12 +222,14 @@ export async function Iter(x) {
 			return makeIter(x);
 		}
 	}
-	throw new JsError(Printer.printStr`Cannot convert ${x} to Iter!`);
+	interpreter.throwError(
+		new JsError(Printer.printStr`Cannot convert ${x} to Iter!`)
+	);
 }
 
 // Core operations
 
-export async function get(x, ...args) {
+export async function get(interpreter, x, ...args) {
 	if (isList(x) || isMap(x)) {
 		return x.get.apply(x, args);
 	}
@@ -216,14 +239,16 @@ export async function get(x, ...args) {
 			return await getImpl.apply(x, args);
 		}
 	}
-	throw new JsError(Printer.printStr`Cannot call get on ${x}!`);
+	interpreter.throwError(
+		new JsError(Printer.printStr`Cannot call get on ${x}!`)
+	);
 }
 
-export async function equals(a, b) {
+export async function equals(interpreter, a, b) {
 	return Imut.is(a, b);
 }
 
-export async function hashCode(a) {
+export async function hashCode(interpreter, a) {
 	if (typeof a === "object" && a !== null) {
 		if (Imut.isList(a)) {
 			return a.hashCode();
@@ -239,107 +264,128 @@ export async function hashCode(a) {
 	return Imut.hash(a);
 }
 
-export async function print(a) {
+export async function print(interpreter, a) {
 	return await Printer.print(a);
 }
 
-export function read(a) {
+export function read(interpreter, a) {
 	return Reader.read(a);
+}
+
+export async function evalForms(interpreter, forms) {
+	let evalEnv = Object.setPrototypeOf({}, interpreter.globalEnv);
+	let result;
+	for (let form of forms) {
+		result = await interpreter.interp(form, evalEnv);
+	}
+	return result;
+}
+
+export async function importForms(interpreter, forms, prefix) {
+	prefix = await Str(interpreter, prefix);
+	let currentEnv = interpreter.currentEnv;
+	let importEnv = Object.setPrototypeOf({}, interpreter.globalEnv);
+	for (let form of forms) {
+		await interpreter.interp(form, importEnv);
+	}
+	for (const symbol of Object.getOwnPropertySymbols(importEnv)) {
+		currentEnv[Symbol.for(prefix + symbol.description)] = importEnv[symbol];
+	}
 }
 
 // Numeric operations
 
-export function neg(a) {
+export function neg(interpreter, a) {
 	return -a;
 }
 
-export function add(a, b) {
+export function add(interpreter, a, b) {
 	return a + b;
 }
 
-export function sub(a, b) {
+export function sub(interpreter, a, b) {
 	return a - b;
 }
 
-export function mul(a, b) {
+export function mul(interpreter, a, b) {
 	return a * b;
 }
 
-export function div(a, b) {
+export function div(interpreter, a, b) {
 	return a / b;
 }
 
-export function mod(a, b) {
+export function mod(interpreter, a, b) {
 	return a % b;
 }
 
-export function pow(a, b) {
+export function pow(interpreter, a, b) {
 	return a ** b;
 }
 
-export function bitAnd(a, b) {
+export function bitAnd(interpreter, a, b) {
 	return a & b;
 }
 
-export function bitOr(a, b) {
+export function bitOr(interpreter, a, b) {
 	return a | b;
 }
 
-export function bitNot(a, b) {
+export function bitNot(interpreter, a, b) {
 	return ~a;
 }
 
-export function bitXor(a, b) {
+export function bitXor(interpreter, a, b) {
 	return a ^ b;
 }
 
-export function leftShift(a, b) {
+export function leftShift(interpreter, a, b) {
 	return a << b;
 }
 
-export function rightShift(a, b) {
+export function rightShift(interpreter, a, b) {
 	return a >> b;
 }
 
-export function rightShiftUnsigned(a, b) {
+export function rightShiftUnsigned(interpreter, a, b) {
 	return a >>> b;
 }
 
-export function lt(a, b) {
+export function lt(interpreter, a, b) {
 	return a < b;
 }
 
-export function lte(a, b) {
+export function lte(interpreter, a, b) {
 	return a <= b;
 }
 
-export function gt(a, b) {
+export function gt(interpreter, a, b) {
 	return a > b;
 }
 
-export function gte(a, b) {
+export function gte(interpreter, a, b) {
 	return a >= b;
 }
 
 // IO operations
 
-export function jsProcess() {
+export function jsProcess(interpreter) {
 	return process;
 }
 
-export function writeFile(file, content, flag) {
+export function writeFile(interpreter, file, content, flag) {
 	return fs.writeFileSync(file, content, {
 		flag: flag ?? "w",
 	});
 }
 
-export function readFile(file) {
+export function readFile(interpreter, file) {
 	return fs.readFileSync(file, { encoding: "utf-8" });
 }
 
 let readlineInterface;
 
-export async function input(prompt) {
+export async function input(_interpreter, prompt) {
 	if (typeof readlineInterface === "undefined") {
 		readlineInterface = readline.createInterface({
 			input: process.stdin,
@@ -351,27 +397,27 @@ export async function input(prompt) {
 	});
 }
 
-export async function exec(...args) {
-	const strArgs = await Promise.all(args.map((x) => Str(x)));
+export async function exec(interpreter, ...args) {
+	const strArgs = await Promise.all(args.map((x) => Str(interpreter, x)));
 	return child_process.execSync(strArgs.join(" ")).toString();
 }
 
 // interop
 
-export function jsGetProperty(object, property) {
+export function jsGetMethod(_interpreter, object, property, args) {
+	return object[property](...args);
+}
+
+export function jsGetProperty(_interpreter, object, property) {
 	return object[property];
 }
 
-export function jsSetProperty(object, property, value) {
+export function jsSetProperty(_interpreter, object, property, value) {
 	object[property] = value;
 }
 
 // other
 
-export function uniqueSym(a) {
-	return Symbol(`#${Str(a)}`);
-}
-
-export function extend(target, parent) {
-	return Object.setPrototypeOf(target, parent);
+export function uniqueSym(interpreter, a) {
+	return Symbol(`#${Str(interpreter, a)}`);
 }

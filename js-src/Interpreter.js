@@ -1,27 +1,21 @@
-import Imut, { isList, isMap } from "immutable";
-import {
-	assertType,
-	Bool,
-	extend,
-	get,
-	Iter,
-	List,
-	Proc,
-	Sym,
-} from "./Builtins.js";
+import { List, isList } from "immutable";
+import * as Builtins from "./Builtins.js";
 import { printStr } from "./Printer.js";
 import { Recured } from "./Recured.js";
 import { Constructors, SpecialForms } from "./Symbols.js";
 
 export class Interpreter {
 	/** @type {any} */ globalEnv;
-	/** @type {any} */ #currentEnv;
+	/** @type {any} */ currentEnv;
+	/** @type {any} */ stack;
 
 	/**
 	 * @param {any} globalEnv
 	 */
 	constructor(globalEnv) {
-		this.globalEnv = globalEnv;
+		this.globalEnv = Object.setPrototypeOf({}, globalEnv);
+		this.currentEnv = this.globalEnv;
+		this.stack = [];
 	}
 
 	/**
@@ -31,15 +25,27 @@ export class Interpreter {
 	 * @returns {any} result or snapshot
 	 */
 	async interp(form, env) {
-		try {
-			return await this.#interpForm(form, env ?? this.globalEnv);
-		} catch (error) {
-			throw error;
+		return await this.#interpForm(form, env ?? this.globalEnv);
+	}
+
+	pushCaller(caller) {
+		this.stack.push(caller);
+	}
+
+	popCaller() {
+		this.stack.pop();
+	}
+
+	throwError(error) {
+		if (!(error instanceof Error)) {
+			throw new Error(printStr`Expected type Error, but received: ${error}!`);
 		}
+		error.yaliStack = [...this.stack];
+		throw error;
 	}
 
 	async #interpForm(form, env) {
-		this.#currentEnv = env;
+		this.currentEnv = env;
 		if (typeof form === "symbol") {
 			let result = env[form];
 			if (typeof result !== "undefined") {
@@ -48,7 +54,7 @@ export class Interpreter {
 			if (form in env) {
 				return result;
 			}
-			throw new Error(printStr`Symbol ${form} is not defined!`);
+			this.throwError(new Error(printStr`Symbol ${form} is not defined!`));
 		}
 		if (isList(form) && form.size > 0) {
 			let [operator, ...operands] = form;
@@ -58,13 +64,19 @@ export class Interpreter {
 			}
 			operator = await this.#interpForm(operator, env);
 			if (typeof operator !== "function") {
-				operator = await Proc(operator);
+				operator = await Builtins.Proc(this, operator);
 			}
 			if (operator.macro) {
-				let expansion = await operator(...operands);
+				let expansion = await operator(this, ...operands);
 				return await this.#interpForm(expansion, env);
 			}
-			return await operator(...(await this.#interpOperands(operands, env)));
+			this.pushCaller(operator.procName ?? operator.name ?? "anonymous");
+			const result = await operator(
+				this,
+				...(await this.#interpOperands(operands, env))
+			);
+			this.popCaller();
+			return result;
 		}
 		// All other forms evaluate to themselves
 		return form;
@@ -78,7 +90,10 @@ export class Interpreter {
 			if (operand === SpecialForms.Splice) {
 				const nextOperand = operands[i + 1];
 				const interpedNextOperand = await this.#interpForm(nextOperand, env);
-				const splicableNextOperand = await Iter(interpedNextOperand);
+				const splicableNextOperand = await Builtins.Iter(
+					this,
+					interpedNextOperand
+				);
 				interpedOperands.push(...splicableNextOperand);
 				break;
 			}
@@ -89,7 +104,7 @@ export class Interpreter {
 	}
 
 	async #assignBindings(bindings, env) {
-		assertType(List, bindings);
+		Builtins.assertType(this, Builtins.List, bindings);
 		const length = bindings.size;
 		for (let i = 0; i < length; i += 2) {
 			const bindingForm = bindings.get(i);
@@ -109,7 +124,7 @@ export class Interpreter {
 			const [type, ...operands] = bindingForm;
 			// Fast path List
 			if (type === Constructors.List) {
-				const [...splicedValue] = await Iter(value);
+				const [...splicedValue] = await Builtins.Iter(this, value);
 				const length = operands.length;
 				for (let i = 0; i < length; i += 1) {
 					const operand = operands[i];
@@ -117,7 +132,7 @@ export class Interpreter {
 						const nextOperand = operands[i + 1];
 						await this.#assignBinding(
 							nextOperand,
-							Imut.List(splicedValue.slice(i)),
+							List(splicedValue.slice(i)),
 							env
 						);
 						break;
@@ -132,21 +147,23 @@ export class Interpreter {
 					const key = operands[i];
 					const interpedKey = await this.#interpForm(key, env);
 					const operand = operands[i + 1];
-					this.#assignBinding(operand, await get(value, interpedKey), env);
+					this.#assignBinding(
+						operand,
+						await Builtins.get(this, value, interpedKey),
+						env
+					);
 				}
 				return;
 			}
 			const interpedType = await this.#interpForm(type, env);
-			assertType(interpedType, value);
+			Builtins.assertType(this, interpedType, value);
 			// recurse with the list constructor
-			this.#assignBinding(
-				Imut.List.of(Constructors.List, ...operands),
-				value,
-				env
-			);
+			this.#assignBinding(List.of(Constructors.List, ...operands), value, env);
 		}
-		throw new Error(
-			printStr`Cannot bind value: ${value} to binding form: ${bindingForm}!`
+		this.throwError(
+			new Error(
+				printStr`Cannot bind value: ${value} to binding form: ${bindingForm}!`
+			)
 		);
 	}
 
@@ -154,10 +171,10 @@ export class Interpreter {
 
 	async [SpecialForms.Def](operands, env) {
 		if (operands.length !== 2) {
-			throw new Error("def expects 2 operands!");
+			this.throwError(new Error("def expects 2 operands!"));
 		}
 		const [name, value] = operands;
-		assertType(Sym, name);
+		Builtins.assertType(this, Builtins.Sym, name);
 		const interpedValue = await this.#interpForm(value, env);
 		if (
 			typeof interpedValue === "function" &&
@@ -170,11 +187,11 @@ export class Interpreter {
 
 	async [SpecialForms.If](operands, env) {
 		if (operands.length > 3) {
-			throw new Error("if expects 3 or fewer operands!");
+			this.throwError(new Error("if expects 3 or fewer operands!"));
 		}
 		const [test, thenCase, elseCase] = operands;
 		const interpedTest = await this.#interpForm(test, env);
-		const booledTest = await Bool(interpedTest);
+		const booledTest = await Builtins.Bool(this, interpedTest);
 		if (booledTest === true) {
 			return await this.#interpForm(thenCase, env);
 		} else {
@@ -183,9 +200,10 @@ export class Interpreter {
 	}
 
 	async [SpecialForms.Do](operands, env) {
+		const body = operands;
 		let result;
-		for (let operand of operands) {
-			result = await this.#interpForm(operand, env);
+		for (let form of body) {
+			result = await this.#interpForm(form, env);
 		}
 		return result;
 	}
@@ -196,24 +214,47 @@ export class Interpreter {
 
 	async [SpecialForms.Throw](operands, env) {
 		if (operands.length !== 1) {
-			throw new Error("throw expects a single operand!");
+			this.throwError(new Error("throw expects a single operand!"));
 		}
 		const [throwable] = operands;
 		const interpedThrowable = await this.#interpForm(throwable, env);
-		throw interpedThrowable;
+		this.throwError(interpedThrowable);
 	}
 
 	async [SpecialForms.Try](operands, env) {
-		// TODO
+		const body = operands;
+		const elseCase = operands.pop();
+		try {
+			let result;
+			for (let form of body) {
+				result = await this.#interpForm(form, env);
+			}
+			return result;
+		} catch (error) {
+			if (isList(elseCase) && elseCase.first() === SpecialForms.Catch) {
+				if (elseCase.size < 2) {
+					this.throwError(new Error("catch expects 1 or more operands!"));
+				}
+				const [_, binding, ...body] = elseCase;
+				const catchEnv = Object.setPrototypeOf({}, env);
+				this.#assignBinding(binding, error, catchEnv);
+				let result;
+				for (let form of body) {
+					result = await this.#interpForm(form, catchEnv);
+				}
+				return result;
+			}
+			return this.#interpForm(elseCase);
+		}
 	}
 
 	async [SpecialForms.Catch](operands, env) {
-		// TODO
+		this.throwError(new Error("Cannot use catch outside of try!"));
 	}
 
 	async [SpecialForms.Let](operands, env) {
 		const [bindings, ...body] = operands;
-		const letEnv = extend({}, env);
+		const letEnv = Object.setPrototypeOf({}, env);
 		await this.#assignBindings(bindings, letEnv);
 		let result;
 		for (const form of body) {
@@ -224,12 +265,12 @@ export class Interpreter {
 
 	async [SpecialForms.Proc](operands, env) {
 		let [params, ...body] = operands;
-		assertType(List, params);
+		Builtins.assertType(this, Builtins.List, params);
 		params = params.unshift(Constructors.List);
-		const procImpl = async (...args) => {
+		const procImpl = async (_, ...args) => {
 			let result;
 			for (;;) {
-				let procEnv = extend({}, env);
+				let procEnv = Object.setPrototypeOf({}, env);
 				await this.#assignBinding(params, args, procEnv);
 				for (const form of body) {
 					result = await this.#interpForm(form, procEnv);
@@ -255,15 +296,17 @@ export class Interpreter {
 
 	async [SpecialForms.MacroExpand](operands, env) {
 		if (operands.length !== 1) {
-			throw new Error("macro-expand expects a single operand!");
+			this.throwError(new Error("macro-expand expects a single operand!"));
 		}
 		const [macroApplication] = operands;
-		assertType(List, macroApplication);
+		Builtins.assertType(this, Builtins.List, macroApplication);
 		const [macro, ...macroOperands] = macroApplication;
 		const macroInterped = await this.#interpForm(macro, env);
 		if (typeof macroInterped !== "function" || macroInterped.macro !== true) {
-			throw new TypeError(
-				printStr`Expected macro, but received: ${print(macroInterped)}!`
+			this.throwError(
+				new TypeError(
+					printStr`Expected macro, but received: ${print(macroInterped)}!`
+				)
 			);
 		}
 		return await macroInterped(...macroOperands);
@@ -271,7 +314,7 @@ export class Interpreter {
 
 	async [SpecialForms.Quote](operands, _env) {
 		if (operands.length !== 1) {
-			throw new Error("quote expects a single operand!");
+			this.throwError(new Error("quote expects a single operand!"));
 		}
 		const [quoted] = operands;
 		return quoted;
@@ -279,7 +322,7 @@ export class Interpreter {
 
 	async [SpecialForms.QuasiQuote](operands, env) {
 		if (operands.length !== 1) {
-			throw new Error("quasi-quote expects a single operand!");
+			this.throwError(new Error("quasi-quote expects a single operand!"));
 		}
 		const [quasiQuoted] = operands;
 		if (!isList(quasiQuoted)) {
@@ -291,7 +334,7 @@ export class Interpreter {
 				const [first, second] = subForm;
 				if (first === SpecialForms.Unquote) {
 					if (subForm.size !== 2) {
-						throw new Error("unquote expects a single operand!");
+						this.throwError(new Error("unquote expects a single operand!"));
 					}
 					const interpedSecond = await this.#interpForm(second, env);
 					quoted.push(interpedSecond);
@@ -299,10 +342,12 @@ export class Interpreter {
 				}
 				if (first === SpecialForms.UnquoteSplice) {
 					if (subForm.size !== 2) {
-						throw new Error("unquote-slice expects a single operand!");
+						this.throwError(
+							new Error("unquote-slice expects a single operand!")
+						);
 					}
 					const interpedSecond = await this.#interpForm(second, env);
-					const sliceableSecond = await Iter(interpedSecond);
+					const sliceableSecond = await Builtins.Iter(this, interpedSecond);
 					quoted.push(...sliceableSecond);
 					continue;
 				}
@@ -313,26 +358,22 @@ export class Interpreter {
 			);
 			quoted.push(quasiQuotedSubForm);
 		}
-		return Imut.List(quoted);
+		return List(quoted);
 	}
 
 	async [SpecialForms.Unquote](_operands, _env) {
-		throw new Error("Cannot use unquote outside of quasi-quote!");
+		this.throwError(new Error("Cannot use unquote outside of quasi-quote!"));
 	}
 
 	async [SpecialForms.UnquoteSplice](_operands, _env) {
-		throw new Error("Cannot use unquote-splice outside of quasi-quote!");
+		this.throwError(
+			new Error("Cannot use unquote-splice outside of quasi-quote!")
+		);
 	}
 
 	async [SpecialForms.Splice](_operands, _env) {
-		throw new Error("Cannot use unquote-splice outside of bindings!");
-	}
-
-	async [SpecialForms.Eval](operands, env) {
-		throw new Error("TODO");
-	}
-
-	async [SpecialForms.Import](operands, env) {
-		throw new Error("TODO");
+		this.throwError(
+			new Error("Cannot use unquote-splice outside of bindings!")
+		);
 	}
 }

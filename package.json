@@ -8,8 +8,8 @@
     "test": "test"
   },
   "scripts": {
-    "start": "node ./js-src/Yali.js",
-    "test": "node ./js-test/Test.js"
+    "start": "tsc && node ./dist/src/yali.js",
+    "test": "tsc && node ./dist/test/test.js"
   },
   "repository": {
     "type": "git",
@@ -28,5 +28,9 @@
   "homepage": "https://github.com/ejrbuss/yali-js#readme",
   "dependencies": {
     "immutable": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.10.9",
+    "typescript": "^4.4.4"
   }
 }
