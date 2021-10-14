@@ -1,4 +1,5 @@
 import { isList, isMap, List as IList } from "immutable";
+import { extendEnv } from "./env.js";
 import { toJsIter } from "./iter.js";
 import { printTag } from "./printer.js";
 import { Recured } from "./recured.js";
@@ -7,15 +8,15 @@ import {
 	assertType,
 	BoolConstructor,
 	ListConstructor,
+	MultiProc,
 	ProcConstructor,
 	SymConstructor,
 } from "./types.js";
 
-function extendEnv(env) {
-	return Object.setPrototypeOf({}, env);
-}
+// TODO reserved words in environment!
 
 export class Interpreter {
+	static running;
 	//
 	constructor(initialEnv) {
 		this.globalEnv = extendEnv(initialEnv);
@@ -70,32 +71,43 @@ export class Interpreter {
 		}
 		if (isList(form)) {
 			let [operator, ...operands] = form;
-			// Special Forms
-			if (typeof operator === "symbol" && operator in this) {
-				return this[operator](operands, env);
+			if (typeof operator === "symbol") {
+				// special forms
+				if (operator in this) {
+					return this[operator](operands, env);
+				}
+				// macros
+				operator = this.innerInterp(operator, env);
+				if (operator[Special.macro] === true) {
+					let expansion = operator(...operands);
+					return this.innerInterp(expansion, env);
+				}
+			} else {
+				operator = this.innerInterp(operator, env);
 			}
-			// Eval operator
-			operator = this.innerInterp(operator, env);
+			// Try to convert to proc
 			if (typeof operator !== "function") {
 				operator = this.wrapExternal(() => ProcConstructor(operator));
 			}
-			let anyOperator = operator;
-			// Macro expansion
-			if (anyOperator[Special.macro] === true) {
-				// TODO move over Special.sourceRef of form onto expanded
-				let expansion = anyOperator(this, ...operands);
-				return this.innerInterp(expansion, env);
-			}
+
 			// Interped proc
-			const interpedOperands = this.interpOperands(operands, env);
-			if (anyOperator[Special.proc] === true) {
-				this.stack.push(anyOperator);
-				const interped = anyOperator(...interpedOperands);
-				this.stack.pop();
-				return interped;
+			let interpedOperands = this.interpOperands(operands, env);
+			if (operator[Special.proc] === true) {
+				// Tail call stuff
+				for (;;) {
+					this.stack.push(operator);
+					let interped = operator(...interpedOperands);
+					this.stack.pop();
+					if (interped && interped instanceof Recured) {
+						operator = interped.operator;
+						interpedOperands = interped.operands;
+					} else {
+						return interped;
+					}
+				}
 			}
 			// External function (need to catch/rethrow errors)
-			return this.wrapExternal(() => anyOperator(...interpedOperands));
+			return this.wrapExternal(() => operator(...interpedOperands));
 		}
 		// All other forms evaluate to themselves
 		return form;
@@ -185,16 +197,15 @@ export class Interpreter {
 	[SpecialForms.Def](operands, env) {
 		const name = operands[0];
 		this.wrapExternal(() => assertType(SymConstructor, name));
-		const nameSymbol = name;
 		const value = operands[1];
 		const interpedValue = this.innerInterp(value, env);
 		if (
 			typeof interpedValue === "function" &&
 			typeof interpedValue[Special.name] === "undefined"
 		) {
-			interpedValue[Special.name] = nameSymbol.description;
+			interpedValue[Special.name] = name.description;
 		}
-		env[nameSymbol] = interpedValue;
+		env[name] = interpedValue;
 	}
 
 	[SpecialForms.If](operands, env) {
@@ -244,7 +255,7 @@ export class Interpreter {
 				const catchEnv = extendEnv(env);
 				this.assignBinding(binding, error, catchEnv);
 				let result;
-				body.forEach((form) => (result = this.innerInterp(form, env)));
+				body.forEach((form) => (result = this.innerInterp(form, catchEnv)));
 				return result;
 			}
 			return this.innerInterp(elseCase, env);
@@ -258,9 +269,9 @@ export class Interpreter {
 	[SpecialForms.Let](operands, env) {
 		const [bindings, ...body] = operands;
 		const letEnv = extendEnv(env);
-		this.assignBindings(bindings, letEnv);
+		this.assignBindings(bindings, env);
 		let result;
-		body.forEach((form) => (result = this.innerInterp(form, env)));
+		body.forEach((form) => (result = this.innerInterp(form, letEnv)));
 		return result;
 	}
 
@@ -278,15 +289,15 @@ export class Interpreter {
 			const bodyForm = body[0];
 			anonymous = (...args) => {
 				const procEnv = extendEnv(env);
-				this.assignBinding(paramsList, args, procEnv);
+				this.assignBinding(paramsList, IList(args), procEnv);
 				return this.innerInterp(bodyForm, procEnv);
 			};
 		} else {
 			anonymous = (...args) => {
 				const procEnv = extendEnv(env);
-				this.assignBinding(paramsList, args, procEnv);
+				this.assignBinding(paramsList, IList(args), procEnv);
 				let result;
-				body.forEach((form) => (result = this.innerInterp(form, env)));
+				body.forEach((form) => (result = this.innerInterp(form, procEnv)));
 				return result;
 			};
 		}
@@ -297,25 +308,27 @@ export class Interpreter {
 	}
 
 	[SpecialForms.Macro](operands, env) {
-		let proc = this[SpecialForms.Proc](operands, env);
-		this[Special.macro] = true;
+		const proc = this[SpecialForms.Proc](operands, env);
+		proc[Special.macro] = true;
 		return proc;
+	}
+
+	[SpecialForms.MultiProc](operands, env) {
+		const signature = operands[0];
+		this.wrapExternal(() => {
+			assertType(ListConstructor, signature);
+			signature.forEach((name) => assertType(SymConstructor, name));
+		});
+		return new MultiProc(signature.first().description, signature.rest());
 	}
 
 	[SpecialForms.MacroExpand](operands, env) {
 		const macroApplication = operands[0];
 		this.wrapExternal(() => assertType(ListConstructor, macroApplication));
 		const [macro, ...macroOperands] = macroApplication;
-		const macroInterped = this.innerInterp(macro, env);
-		if (
-			typeof macroInterped !== "function" ||
-			macroInterped[Special.macro] !== true
-		) {
-			this.throw(
-				new Error(printTag`Expected macro, but received: ${macroInterped}!`)
-			);
-		}
-		return macroInterped(...macroOperands);
+		const interpedMacro = this.innerInterp(macro, env);
+		const procedMacro = this.wrapExternal(() => ProcConstructor(interpedMacro));
+		return procedMacro(...macroOperands);
 	}
 
 	[SpecialForms.Quote](operands) {

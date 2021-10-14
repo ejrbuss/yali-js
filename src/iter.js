@@ -1,5 +1,4 @@
-import { isList } from "immutable";
-import { isMap } from "util/types";
+import { isList, isMap } from "immutable";
 import { first, isEmpty, rest } from "./types.js";
 
 export function* firstRestGen(xs) {

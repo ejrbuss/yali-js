@@ -1,8 +1,9 @@
 import { createInterface } from "readline";
 import { applyCode, FgMagenta } from "./ansi.js";
 import { DefaultColors, print } from "./printer.js";
-import { IncompleteForm, read } from "./reader.js";
+import { IncompleteForm } from "./reader.js";
 import { fileURLToPath } from "url";
+import { createBuiltinsEnv, seval } from "./builtins.js";
 
 const Prompt = applyCode(FgMagenta, "> ");
 const ContinuePrompt = "..  ";
@@ -22,11 +23,12 @@ export async function repl() {
 
 	let input = "";
 	let sequentialErrors = 0;
+	let replEnv = createBuiltinsEnv();
 	while (sequentialErrors < MaxSequentialErrors) {
 		try {
 			input += await prompt();
-			const forms = read(input, "<repl>");
-			console.log(print(forms, DefaultColors));
+			const result = seval(input, replEnv, "<repl>");
+			console.log(print(result, DefaultColors));
 			sequentialErrors = 0;
 			input = "";
 		} catch (error) {
@@ -34,6 +36,8 @@ export async function repl() {
 				input += "\n  ";
 				continue;
 			}
+			console.error(error);
+			input = "";
 		}
 	}
 	readline.close();

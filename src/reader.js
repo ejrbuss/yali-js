@@ -40,7 +40,7 @@ export function read(source, file = "<anonymous>") {
 		if ((match = scanner.scanRegexp(ReString))) {
 			// JSON.parse does not handle multi-line string
 			// so we need to escape them
-			return JSON.parse(match.image());
+			return JSON.parse(match.image().replace("\n", "\\n"));
 		}
 		if ((match = scanner.scanRegexp(ReSymbol))) {
 			const image = match.image();
@@ -69,6 +69,7 @@ export function read(source, file = "<anonymous>") {
 	function readForms(terminator) {
 		const formsArray = [];
 		const here = scanner.here();
+		here.position -= 1;
 		for (;;) {
 			scanner.scanRegexp(ReWhitepsace);
 			if (scanner.isDone()) {

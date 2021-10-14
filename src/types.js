@@ -24,13 +24,19 @@ export class MultiProc {
 	}
 
 	dispatch(...args) {
-		let typeArgs = IList(args.map(typeOf));
-		let impl = this.methodTable.get(typeArgs);
+		const typeArgs = IList(args.map(typeOf));
+		const impl = this.methodTable.get(typeArgs);
 		if (typeof impl !== "undefined") {
 			return impl(...args);
 		}
+		const signature = typeArgs
+			.map(typeName)
+			.unshift(this[Special.name])
+			.join(" ");
 		throw new Error(
-			`${this[Special.name]} is not implemented for ${print(typeArgs)}!`
+			`The method (${signature}) is not implemented for arguments: ${print(
+				IList(args)
+			)}!`
 		);
 	}
 }
@@ -43,7 +49,7 @@ export function BoolConstructor(a) {
 	if (typeof a === "boolean") {
 		return a;
 	}
-	const converted = ToBool.dispatch(a);
+	const converted = toBool.dispatch(a);
 	if (typeof converted === "boolean") {
 		return converted;
 	}
@@ -58,7 +64,7 @@ export function NumConstructor(a) {
 	if (typeof a === "number") {
 		return a;
 	}
-	const converted = ToNum.dispatch(a);
+	const converted = toNum.dispatch(a);
 	if (typeof converted === "number") {
 		return converted;
 	}
@@ -75,7 +81,7 @@ export function StrConstructor(...args) {
 			if (typeof a === "string") {
 				return a;
 			}
-			const convert = ToStr.getMethod(IList.of(typeOf(a))) ?? print;
+			const convert = toStr.getMethod(IList.of(typeOf(a))) ?? print;
 			const converted = convert(a);
 			if (typeof converted === "string") {
 				return converted;
@@ -94,6 +100,11 @@ export function SymConstructor(a) {
 		return a;
 	}
 	assertType(StrConstructor, a);
+	if (a.startsWith("#")) {
+		throw new Error(
+			`Cannot convert ${print(a)} to Sym, # prefix is reserved for unique Sym!`
+		);
+	}
 	return Symbol.for(a);
 }
 
@@ -185,9 +196,8 @@ export function jsTypeToType(jsConstructor) {
 }
 
 export function typeName(type) {
-	if (typeof type === "object" && type !== null) {
-		const anyType = type;
-		const name = anyType[Special.name] ?? anyType.name;
+	if (typeof type === "function") {
+		const name = type[Special.name] ?? type.name;
 		if (typeof name === "string") {
 			return name;
 		}
@@ -197,7 +207,9 @@ export function typeName(type) {
 
 export function assertType(type, a) {
 	if (type !== typeOf(a)) {
-		throw new Error(`Expected type: ${typeName(type)}, but received: ${a}!`);
+		throw new Error(
+			`Expected type: ${typeName(type)}, but received: ${print(a)}!`
+		);
 	}
 }
 
@@ -207,15 +219,12 @@ JsConstructorToConstructor.set(Keyword, KeywordConstructor);
 
 JsConstructorToConstructor.set(MultiProc, MultiProcConstructor);
 
-export const ErrorConstructor = jsTypeToType(Error);
-export const PromiseConstructor = jsTypeToType(Promise);
-
 const unaryTypeArgs = List.of(Symbol.for("a"));
 const binaryTypeArgs = List.of(Symbol.for("a"), Symbol.for("b"));
 
-export const ToBool = new MultiProc("to-Bool", unaryTypeArgs);
-export const ToNum = new MultiProc("to-Num", unaryTypeArgs);
-export const ToStr = new MultiProc("to-Str", unaryTypeArgs);
+export const toBool = new MultiProc("to-Bool", unaryTypeArgs);
+export const toNum = new MultiProc("to-Num", unaryTypeArgs);
+export const toStr = new MultiProc("to-Str", unaryTypeArgs);
 export const toProc = new MultiProc("to-Proc", unaryTypeArgs);
 export const first = new MultiProc("first", unaryTypeArgs);
 export const rest = new MultiProc("rest", unaryTypeArgs);

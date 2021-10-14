@@ -1,12 +1,12 @@
 export const Special = {
-	name: Symbol("yali-name"),
-	jsConstructor: Symbol("yali-js-constructor"),
-	sourceRef: Symbol("yali-source-ref"),
-	macro: Symbol("yali-macro"),
-	proc: Symbol("yali-proc"),
-	stack: Symbol("yali-stack"),
-	params: Symbol("params"),
-	body: Symbol("body"),
+	name: Symbol("#yali-name"),
+	jsConstructor: Symbol("#yali-js-constructor"),
+	sourceRef: Symbol("#yali-source-ref"),
+	macro: Symbol("#yali-macro"),
+	proc: Symbol("#yali-proc"),
+	stack: Symbol("#yali-stack"),
+	params: Symbol("#yali-params"),
+	body: Symbol("#yali-body"),
 };
 
 export const ConstructorSymbols = {
@@ -24,8 +24,8 @@ export const SpecialForms = {
 	Catch: Symbol.for("catch"),
 	Let: Symbol.for("let"),
 	Proc: Symbol.for("proc"),
-	MultiProc: Symbol.for("multi-proc"),
 	Macro: Symbol.for("macro"),
+	MultiProc: Symbol.for("multi-proc"),
 	MacroExpand: Symbol.for("macro-expand"),
 	Quote: Symbol.for("quote"),
 	QuasiQuote: Symbol.for("quasi-quote"),

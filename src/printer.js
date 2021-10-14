@@ -44,7 +44,7 @@ export function print(form, colors = IMap()) {
 		return applyColor(sym, form.description ?? "");
 	}
 	if (form instanceof Keyword) {
-		return applyColor(keyword, form.name);
+		return applyColor(keyword, ":" + form.name);
 	}
 	if (isList(form)) {
 		return `${applyColor(punc, "(")}${form
@@ -62,7 +62,7 @@ export function print(form, colors = IMap()) {
 		return applyColor(poundStr, `#<proc::${name}>`);
 	}
 	if (typeof form === "object" && form !== null) {
-		let name = form[Special.name];
+		let name = form[Special.name] ?? "";
 		let type = form.constructor[Special.name] ?? form.constructor.name;
 		return applyColor(poundStr, `#<${type}::${name}>`);
 	}
