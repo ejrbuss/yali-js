@@ -33,9 +33,9 @@ testInterp("Num literal", "14.5", "14.5");
 testInterp("Keyword literal", ":x", ":x");
 testInterp("Str literal", '"test\n"', '"test\n"');
 testInterp("List constructor", "[1 2 3]", "(1 2 3)");
-testInterp("One plus one", "(js+ 1 1)", "2");
-testInterp("Add spread list", "(js+ ... [3 4])", "7");
-testInterp("Add spread map", '(js+ "x" ... { 1 2 })', '"x1,2"');
+testInterp("One plus one", "(js.+ 1 1)", "2");
+testInterp("Add spread list", "(js.+ ... [3 4])", "7");
+testInterp("Add spread map", '(js.+ "x" ... { 1 2 })', '"x1,2"');
 testInterp("Basic Str conversion", '(Str nil "x" :x 3)', '"nilx:x3"');
 testInterp("Def variable", "(def x 4) x", "4");
 testInterp("Def chain", "(def x 42) (def y x) y", "42");
@@ -47,7 +47,7 @@ testInterp("Let single binding 2", "(def x 4) (let (y [x x]) y)", "(4 4)");
 testInterp("Let shadow binding", "(def x 4) (let (x 2) x)", "2");
 testInterp(
 	"Let multi binding",
-	"(let (x 1 y 2 z 3) (def s (js+ x y)) (js+ s z))",
+	"(let (x 1 y 2 z 3) (def s (js.+ x y)) (js.+ s z))",
 	"6"
 );
 testInterp(
@@ -63,7 +63,7 @@ testInterp(
 testInterp("Let list binding 3", "(let ([x] {:x 4 :y 5}) x)", "(:x 4)");
 testInterp(
 	"Let list binding 4",
-	"(let ([[x] ... rest] [[1 2 3] 0 -1]) (js+ rest x))",
+	"(let ([[x] ... rest] [[1 2 3] 0 -1]) (js.+ rest x))",
 	'"List [ 0, -1 ]1"'
 );
 testInterp("Let map binding 1", "(let ({ :x x } {:x 4}) x)", "4");
@@ -73,7 +73,7 @@ testInterp(
 	'"nil:z"'
 );
 testInterp("Proc identity", "((proc (x) x) 4)", "4");
-testInterp("Proc square", "((proc (x) (def y x) (js* y y)) 5)", "25");
+testInterp("Proc square", "((proc (x) (def y x) (js.* y y)) 5)", "25");
 testInterp(
 	"Proc destructirng 1",
 	"((proc (x y ... rest) rest) ... [:x :y 1 2 3])",
@@ -81,22 +81,22 @@ testInterp(
 );
 testInterp(
 	"Recur basic",
-	"(def f (proc (x n) (if x (recur (f false (js+ n 1))) n))) (f true 3)",
+	"(def f (proc (x n) (if x (recur (f false (js.+ n 1))) n))) (f true 3)",
 	"4"
 );
 testInterp(
 	"Macro does not evaluate args",
-	"(def x 4) (def m (macro () 'x)) (m y z ...rest)",
+	"(def x 4) (def-macro (m) 'x) (m y z ...rest)",
 	"4"
 );
 testInterp(
 	"Macro binds source code",
-	"(def m (macro (x ... rest) ['List ... rest])) (m z 1 2 3)",
+	"(def-macro (m x ... rest) ['List ... rest]) (m z 1 2 3)",
 	"(1 2 3)"
 );
 testInterp(
 	"Macro-expand macro test",
-	"(macro-expand ((macro () 'x) x y z ... rest))",
+	"(macro-expand ((proc () 'x) x y z ... rest))",
 	"x"
 );
 testInterp("Quasi-quote with unqote", "(def x 4) `(x y ,x)", "(x y 4)");
@@ -120,11 +120,7 @@ testInterp(
 	'(let () (def x 4) (try (eval "x") 2))',
 	"2"
 );
-testInterp(
-	"Eval can define",
-	'(def e env) (eval "(def x 4)" e) (get-property e \'x)',
-	"4"
-);
+testInterp("Eval can define", '(def e (__env)) (eval "(def x 4)" e) x', "4");
 
 // TODO test Let custom type bindings
 // TODO test Throw (need to be able to create an error)

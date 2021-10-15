@@ -1,11 +1,9 @@
 import repl from "repl";
-import { List as IList } from "immutable";
 import { applyCode, Dim } from "./ansi.js";
 import { DefaultColors, print } from "./printer.js";
 import { IncompleteForm } from "./reader.js";
 import { getInterpreter, seval } from "./builtins.js";
 import { Special } from "./symbols.js";
-import { toStr, typeOf } from "./types.js";
 
 const interpreter = getInterpreter();
 const replEnv = interpreter.globalEnv.extendEnv("repl");

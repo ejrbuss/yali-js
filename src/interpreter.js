@@ -1,4 +1,4 @@
-import { isList, isMap, List as IList } from "immutable";
+import { isList, isMap, List as IList, Map as IMap } from "immutable";
 import { Env } from "./env.js";
 import { toJsIter } from "./iter.js";
 import { printTag, print } from "./printer.js";
@@ -12,16 +12,19 @@ import {
 	ProcConstructor,
 	SymConstructor,
 	typeOf,
+	InterfaceConstructor,
 } from "./types.js";
 
 // TODO reserved words in environment!
 
 export class Interpreter {
 	static running;
+	static #MacroCache = new Map();
 	//
 	constructor() {
-		this.globalEnv = new Env("global");
+		this.globalEnv = new Env("root");
 		this.currentEnv = this.globalEnv;
+		this.currentApp = undefined;
 		this.stack = [];
 		Interpreter.running = Interpreter.running ?? this;
 	}
@@ -45,6 +48,15 @@ export class Interpreter {
 		if (typeof error === "object" && error !== null) {
 			const currentStack = error[Special.stack];
 			if (typeof currentStack === "undefined") {
+				// TODO do better
+				const form = this.currentApp;
+				if (form) {
+					console.log(
+						`DEBUG ERROR HERE: ${print(form)} (file://${
+							form[Special.sourceRef]
+						})`
+					);
+				}
 				error[Special.stack] = [...this.stack];
 			}
 		}
@@ -72,6 +84,8 @@ export class Interpreter {
 			this.#throw(new Error(printTag`Symbol ${form} is not defined!`));
 		}
 		if (isList(form)) {
+			this.currentApp = form;
+			// console.log(print(form));
 			let [operator, ...operands] = form;
 			if (typeof operator === "symbol") {
 				// special forms
@@ -81,7 +95,7 @@ export class Interpreter {
 				// macros
 				operator = this.#interp(operator, env);
 				if (operator[Special.macro] === true) {
-					let expansion = operator(...operands);
+					const expansion = this.#expandMacro(operator, operands);
 					return this.#interp(expansion, env);
 				}
 			} else {
@@ -121,22 +135,19 @@ export class Interpreter {
 
 	#interpOperands(operands, env) {
 		const interpedOperands = [];
-		const length = operands.length;
-		for (let i = 0; i < length; i += 1) {
-			const operand = operands[i];
-			if (operand === SpecialForms.Splice) {
-				i += 1;
-				const nextOperand = operands[i];
-				const interpedNextOperand = this.#interp(nextOperand, env);
-				const splicableNextOperand = this.#wrapExternal(() =>
-					toJsIter(interpedNextOperand)
+		operands.forEach((operand) => {
+			if (isList(operand) && operand.first() === SpecialForms.Splice) {
+				operand = operand.get(1);
+				const interpedOperand = this.#interp(operand, env);
+				const splicableOperand = this.#wrapExternal(() =>
+					toJsIter(interpedOperand)
 				);
-				interpedOperands.push(...splicableNextOperand);
-				continue;
+				interpedOperands.push(...splicableOperand);
+			} else {
+				const interpedOperand = this.#interp(operand, env);
+				interpedOperands.push(interpedOperand);
 			}
-			const interpedOperand = this.#interp(operand, env);
-			interpedOperands.push(interpedOperand);
-		}
+		});
 		return interpedOperands;
 	}
 
@@ -155,7 +166,7 @@ export class Interpreter {
 	#assignBinding(binding, value, env) {
 		if (typeof binding === "symbol") {
 			env[binding] = value;
-			return;
+			return true;
 		}
 		if (isList(binding)) {
 			const [type, ...operands] = binding;
@@ -163,20 +174,28 @@ export class Interpreter {
 			if (type === ConstructorSymbols.List) {
 				const iterable = this.#wrapExternal(() => toJsIter(value));
 				const iterator = iterable[Symbol.iterator]();
-				const length = operands.length;
-				for (let i = 0; i < length; i += 1) {
-					const operand = operands[i];
-					if (operand === SpecialForms.Splice) {
-						const nextOperand = operands[i + 1];
-						const rest = [...iterator];
-						this.#assignBinding(nextOperand, IList(rest), env);
-						break;
+				let spliced = false;
+				operands.forEach((operand) => {
+					if (spliced) {
+						this.#throw(
+							new Error(
+								printTag`Cannot have further bindings after a splice: ${binding}!`
+							)
+						);
 					}
-					this.#assignBinding(operand, iterator.next().value, env);
-				}
+					if (isList(operand) && operand.first() === SpecialForms.Splice) {
+						operand = operand.get(1);
+						const rest = [...iterator];
+						this.#assignBinding(operand, IList(rest), env);
+						spliced = true;
+					} else {
+						this.#assignBinding(operand, iterator.next().value, env);
+					}
+				});
 				return;
 			}
 			if (type === ConstructorSymbols.Map && isMap(value)) {
+				// TODO support splice by maintaining a spliced map
 				const length = operands.length;
 				for (let i = 0; i < length; i += 2) {
 					const key = operands[i];
@@ -189,6 +208,7 @@ export class Interpreter {
 			const interpedType = this.#interp(type, env);
 			this.#wrapExternal(() => assertType(interpedType, value));
 			// recurse with the list constructor
+			// TODO replace with interface call to pattern-of
 			this.#assignBinding(
 				IList.of(ConstructorSymbols.List, ...operands),
 				value,
@@ -213,23 +233,30 @@ export class Interpreter {
 			if (type === ConstructorSymbols.List) {
 				const iterable = this.#wrapExternal(() => toJsIter(value));
 				const iterator = iterable[Symbol.iterator]();
-				const length = operands.length;
-				for (let i = 0; i < length; i += 1) {
-					const operand = operands[i];
-					if (operand === SpecialForms.Splice) {
-						const nextOperand = operands[i + 1];
+				let spliced = false;
+				for (const operand of operands) {
+					if (spliced) {
+						this.#throw(
+							new Error(
+								printTag`Cannot have further bindings after a splice: ${binding}!`
+							)
+						);
+					}
+					if (isList(operand) && operand.first() === SpecialForms.Splice) {
+						operand = operand.get(1);
 						const rest = [...iterator];
-						if (!this.#assignStrictBinding(nextOperand, IList(rest), env)) {
+						if (!this.#assignBinding(operand, IList(rest), env)) {
 							return false;
 						}
-						break;
-					}
-					const next = iterator.next();
-					if (next.done) {
-						return false;
-					}
-					if (!this.#assignStrictBinding(operand, next.value, env)) {
-						return false;
+						spliced = true;
+					} else {
+						const next = iterator.next();
+						if (next.done) {
+							return false;
+						}
+						if (!this.#assignBinding(operand, next.value, env)) {
+							return false;
+						}
 					}
 				}
 				return iterator.next().done;
@@ -251,6 +278,7 @@ export class Interpreter {
 			if (interpedType !== typeOf(value)) {
 				return false;
 			}
+			// TODO replace with interface call to pattern-of
 			// recurse with the list constructor
 			return this.#assignStrictBinding(
 				IList.of(ConstructorSymbols.List, ...operands),
@@ -261,26 +289,101 @@ export class Interpreter {
 		return binding === value;
 	}
 
+	#expandMacro(macro, operands) {
+		/** @type {IMap} */
+		let cache;
+		if (Interpreter.#MacroCache.has(macro)) {
+			cache = Interpreter.#MacroCache.get(macro);
+		} else {
+			cache = IMap();
+			Interpreter.#MacroCache.set(macro, cache);
+		}
+		const listOperands = IList(operands);
+		if (cache.has(listOperands)) {
+			return cache.get(listOperands);
+		}
+		const expanded = macro(...operands);
+		cache.set(listOperands, expanded);
+		return expanded;
+	}
+
 	// Special forms
 	[SpecialForms.Def](operands, env) {
 		const name = operands[0];
 		this.#wrapExternal(() => assertType(SymConstructor, name));
 		const value = operands[1];
 		const interpedValue = this.#interp(value, env);
-		if (
-			typeof interpedValue === "function" &&
-			typeof interpedValue[Special.name] === "undefined"
-		) {
-			interpedValue[Special.name] = name.description;
-		}
 		env[name] = interpedValue;
 		return interpedValue;
 	}
 
-	[SpecialForms.Undef](operands, env) {
-		const name = operands[0];
-		this.#wrapExternal(() => assertType(SymConstructor, name));
-		delete env[name];
+	[SpecialForms.DefProc](operands, env) {
+		const [signature, ...body] = operands;
+		this.#wrapExternal(() => {
+			assertType(ListConstructor, signature);
+			assertType(SymConstructor, signature.first());
+		});
+		const name = signature.first();
+		const params = signature.rest();
+		const proc = this[SpecialForms.Proc]([params, ...body], env);
+		proc[Special.name] = name.description;
+		this[SpecialForms.Def]([name, proc], env);
+		return proc;
+	}
+
+	[SpecialForms.DefMacro](operands, env) {
+		const proc = this[SpecialForms.DefProc](operands, env);
+		proc[Special.macro] = true;
+		return proc;
+	}
+
+	[SpecialForms.DefType](operands, env) {
+		const [signature, ...body] = operands;
+		this.#wrapExternal(() => {
+			assertType(ListConstructor, signature);
+			assertType(SymConstructor, signature.first());
+		});
+		const name = signature.first();
+		const params = signature.rest();
+		const Anonymmous = class {};
+		const proc = this[SpecialForms.Proc]([params, ...body], env);
+		const constructor = (...args) => {
+			const target = new Anonymmous();
+			proc.apply(target, args);
+			return target;
+		};
+		constructor[Special.name] = name.description;
+		return this[SpecialForms.Def]([name, constructor], env);
+	}
+
+	[SpecialForms.DefInterface](operands, env) {
+		const signature = operands[0];
+		const fallback = operands[1];
+		this.#wrapExternal(() => {
+			assertType(ListConstructor, signature);
+			signature.forEach((name) => assertType(SymConstructor, name));
+		});
+		const name = signature.first();
+		let interpedFallback = this.#interp(fallback, env);
+		if (typeof interpedFallback !== "undefined") {
+			interpedFallback = this.#wrapExternal(() =>
+				ProcConstructor(interpedFallback)
+			);
+		}
+		const iface = new Interface(signature.rest(), interpedFallback);
+		iface[Special.name] = name.description;
+		return this[SpecialForms.Def]([name, iface], env);
+	}
+
+	[SpecialForms.DefMethod](operands, env) {
+		const signature = operands[0];
+		const impl = operands[1];
+		this.#wrapExternal(() => assertType(ListConstructor, signature));
+		const [iface, ...typeArgs] = this.#interpOperands([...signature], env);
+		this.#wrapExternal(() => assertType(InterfaceConstructor, iface));
+		const interpedImpl = this.#interp(impl, env);
+		this.#wrapExternal(() => iface.defMethod(IList(typeArgs), interpedImpl));
+		return iface;
 	}
 
 	[SpecialForms.If](operands, env) {
@@ -340,6 +443,17 @@ export class Interpreter {
 		this.#throw(new Error("Cannot use catch outside of try!"));
 	}
 
+	async [SpecialForms.Async](operands, env) {
+		throw new Error("TODO");
+	}
+
+	[SpecialForms.Await]() {
+		// Idea return an Awaited (like recured)
+		// only allow if in an async block
+		// keep track of being in an async block as state
+		this.#throw(new Error("Cannot use await outside of async!"));
+	}
+
 	[SpecialForms.Let](operands, env) {
 		const [bindings, ...body] = operands;
 		const letEnv = env.extendEnv("let");
@@ -375,17 +489,21 @@ export class Interpreter {
 			};
 		} else if (body.length === 1) {
 			const bodyForm = body[0];
-			anonymous = (...args) => {
+			const interpreter = this;
+			anonymous = function (...args) {
 				const procEnv = env.extendEnv("proc");
-				this.#assignBinding(paramsList, IList(args), procEnv);
-				return this.#interp(bodyForm, procEnv);
+				env[Special.this] = this;
+				interpreter.#assignBinding(paramsList, IList(args), procEnv);
+				return interpreter.#interp(bodyForm, procEnv);
 			};
 		} else {
-			anonymous = (...args) => {
+			const interpreter = this;
+			anonymous = function (...args) {
 				const procEnv = env.extendEnv("proc");
-				this.#assignBinding(paramsList, IList(args), procEnv);
+				env[Special.this] = this;
+				interpreter.#assignBinding(paramsList, IList(args), procEnv);
 				let result;
-				body.forEach((form) => (result = this.#interp(form, procEnv)));
+				body.forEach((form) => (result = interpreter.#interp(form, procEnv)));
 				return result;
 			};
 		}
@@ -393,30 +511,6 @@ export class Interpreter {
 		anonymous[Special.params] = params;
 		anonymous[Special.body] = body;
 		return anonymous;
-	}
-
-	[SpecialForms.Macro](operands, env) {
-		const proc = this[SpecialForms.Proc](operands, env);
-		proc[Special.macro] = true;
-		return proc;
-	}
-
-	[SpecialForms.Interface](operands, env) {
-		const signature = operands[0];
-		const fallback = operands[1];
-		this.#wrapExternal(() => {
-			assertType(ListConstructor, signature);
-			signature.forEach((name) => assertType(SymConstructor, name));
-		});
-		const interpedFallback = this.#interp(fallback, env);
-		if (typeof fallback !== "undefined") {
-			this.#wrapExternal(() => assertType(ProcConstructor, interpedFallback));
-		}
-		return new Interface(
-			signature.first().description,
-			signature.rest(),
-			interpedFallback
-		);
 	}
 
 	[SpecialForms.MacroExpand](operands, env) {
@@ -427,7 +521,7 @@ export class Interpreter {
 		const procedMacro = this.#wrapExternal(() =>
 			ProcConstructor(interpedMacro)
 		);
-		return procedMacro(...macroOperands);
+		return this.#expandMacro(procedMacro, macroOperands);
 	}
 
 	[SpecialForms.Quote](operands) {
@@ -472,17 +566,30 @@ export class Interpreter {
 	}
 
 	[SpecialForms.Splice]() {
-		this.#throw(new Error("Cannot use unquote-splice outside of bindings!"));
+		this.#throw(
+			new Error("Cannot use unquote-splice outside of application or binding!")
+		);
 	}
 
-	async [SpecialForms.Async](operands, env) {
-		throw new Error("TODO");
+	[SpecialForms.Dot](operands, env) {
+		const [target, ...keys] = operands;
+		const interpedTarget = this.#interp(target, env);
+		const interpedKeys = this.#interpOperands(keys, env);
+		let bindTarget;
+		let result = interpedTarget;
+		interpedKeys.forEach((key) => {
+			bindTarget = result;
+			result = result[key];
+		});
+		if (typeof result === "function" && bindTarget) {
+			let bound = result.bind(bindTarget);
+			bound.nobind = result;
+			result = bound;
+		}
+		return result;
 	}
 
-	[SpecialForms.Await]() {
-		// Idea return an Awaited (like recured)
-		// only allow if in an async block
-		// keep track of being in an async block as state
-		this.#throw(new Error("Cannot use await outside of async!"));
+	[SpecialForms.Set](operands, env) {
+		throw new Error("TODO!");
 	}
 }

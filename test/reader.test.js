@@ -39,3 +39,9 @@ testRead("Quote macro", "'a", [[S("quote"), S("a")]]);
 testRead("Quasi-quote macro", "`a", [[S("quasi-quote"), S("a")]]);
 testRead("Unquote-splice macro", ",,,a", [[S("unquote-splice"), S("a")]]);
 testRead("Unquote macro", ",a", [[S("unquote"), S("a")]]);
+testRead("Splice next to symbol", "...x", [[S("..."), S("x")]]);
+testRead("Dot transform", "target.prop x.y.z", [
+	[S("."), S("target"), "prop"],
+	[S("."), S("x"), "y", "z"],
+]);
+testRead("Dot special forms", ". .? .@", [S("."), S(".?"), S(".@")]);

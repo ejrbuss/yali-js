@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "fs";
+import fs from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { List as IList } from "immutable";
@@ -10,7 +10,6 @@ import {
 	assertType,
 	BinaryEq,
 	BoolConstructor,
-	count,
 	first,
 	hash,
 	isEmpty,
@@ -55,49 +54,9 @@ export function addBuiltins(env) {
 		"to-Proc": toProc,
 		first: first,
 		rest: rest,
-		count: count,
 		"empty?": isEmpty,
 		"#": hash,
 		"binary=": BinaryEq,
-		"js-neg": (a) => -a,
-		"js=": (a, b) => a === b,
-		"js>": (a, b) => a > b,
-		"js<": (a, b) => a < b,
-		"js>=": (a, b) => a >= b,
-		"js<=": (a, b) => a <= b,
-		"js+": (a, b) => a + b,
-		"js-": (a, b) => a - b,
-		"js*": (a, b) => a * b,
-		"js/": (a, b) => a / b,
-		"js-pow": (a, b) => a ** b,
-		"js-mod": (a, b) => a % b,
-		// bitwise operators
-		"bitwise-not": (a) => ~a,
-		"bitwise-or": (a, b) => a | b,
-		"bitwise-and": (a, b) => a & b,
-		"bitwise-xor": (a, b) => a ^ b,
-		"bitwise<<": (a, b) => a << b,
-		"bitwise>>": (a, b) => a >> b,
-		"bitwise>>>": (a, b) => a >>> b,
-		// meta
-		read: read,
-		print: print,
-		eval: seval,
-		env: () => getInterpreter().currentEnv,
-		// interop
-		"get-property": (object, property) => object[property],
-		"set-property!": (object, property, value) => (object[property] = value),
-		"bind-call": (object, thisArg, ...args) => object.call(thisArg, args),
-		"bind-call-property": (object, method, ...args) => object[method](...args),
-		"js-type-of": (a) => typeof a,
-		"js-math": Math,
-		// I/O
-		"read-file": readFileSync,
-		"write-file": writeFileSync,
-		"process-args": IList(process.argv),
-		"write-stdout": (s) => process.stdout.write(StrConstructor(s)),
-		"write-stderr": (s) => process.stdout.write(StrConstructor(s)),
-		exit: (code) => process.exit(code),
 		// iteration
 		"for-each": forEach,
 		map: map,
@@ -105,33 +64,122 @@ export function addBuiltins(env) {
 		reduce: reduce,
 		chunk: chunk,
 		flatten: flatten,
-		// other
-		"unique-sym": (name) => Symbol.for("#" + StrConstructor(name)),
+		// meta
+		read: read,
+		print: print,
+		eval: seval,
+		// interop
+		js: JsProxy,
+		// Specials
+		__env: () => getInterpreter().currentEnv,
+		__name: Special.name,
+		"__js-constructor": Special.jsConstructor,
+		"__source-ref": Special.sourceRef,
+		__macro: Special.macro,
+		__proc: Special.proc,
+		__stack: Special.stack,
+		__params: Special.params,
+		__body: Special.body,
+		__builtin: Special.builtin,
 	};
 
 	// Assign names to all builtins
 	for (const name in jsEnv) {
 		const builtin = jsEnv[name];
 		env[Symbol.for(name)] = builtin;
-		builtin[Special.name] = name;
+		if (typeof builtin === "object" || typeof builtin === "function") {
+			builtin[Special.name] = name;
+			builtin[Special.builtin] = true;
+		}
 	}
 	return env;
 }
+
+const ReSafeIdentifier = /^[a-z_$][a-z_$\d]*/i;
+const Global =
+	typeof window !== "undefined"
+		? window
+		: typeof global !== "undefined"
+		? global
+		: {};
+
+export const JsProxy = new Proxy(
+	{
+		// Operators
+		"==": (a, b) => a == b,
+		"===": (a, b) => a === b,
+		">": (a, b) => a > b,
+		"<": (a, b) => a < b,
+		">=": (a, b) => a >= b,
+		"<=": (a, b) => a <= b,
+		"!": (a) => !a,
+		"&&": (a, b) => a && b,
+		"||": (a, b) => a || b,
+		"?:": (a, b, c) => (a ? b : c),
+		"??": (a, b) => a ?? b,
+		"++": (a) => a++,
+		"--": (a) => a--,
+		"+": (a, b) => a + b,
+		"u-": (a) => -a,
+		"-": (a, b) => a - b,
+		"*": (a, b) => a * b,
+		"/": (a, b) => a / b,
+		"%": (a, b) => a % b,
+		"**": (a, b) => a ** b,
+		"~": (a) => ~a,
+		"&": (a, b) => a & b,
+		"|": (a, b) => a | b,
+		"<<": (a, b) => a << b,
+		">>": (a, b) => a >> b,
+		">>>": (a, b) => a >>> b,
+		new: (a, ...args) => new a(...args),
+		delete: (a, b) => delete a[b],
+		void: (a) => void a,
+		in: (a, b) => a in b,
+		typeof: (a) => typeof a,
+		instanceof: (a, b) => a instanceof b,
+		import: (a) => import(a),
+		// node
+		process,
+		fs,
+	},
+	{
+		get: (cache, property) => {
+			let result = cache[property];
+			if (typeof result !== "undefined") {
+				return result;
+			}
+			if (typeof property === "string" && ReSafeIdentifier.test(property)) {
+				try {
+					result = eval(property);
+					cache[property] = result;
+					return result;
+				} catch (error) {}
+			}
+		},
+		set: (cache, property, value) => {
+			cache[property] = value;
+			return true;
+		},
+	}
+);
 
 export function getInterpreter() {
 	if (Interpreter.running) {
 		return Interpreter.running;
 	}
 	const interpreter = new Interpreter();
-	addPrelude(addBuiltins(interpreter.globalEnv));
+	addBuiltins(interpreter.globalEnv);
+	addPrelude(interpreter.globalEnv);
+	interpreter.globalEnv = interpreter.globalEnv.extendEnv("global");
 	return interpreter;
 }
 
 export function addPrelude(env) {
 	const srcDir = dirname(fileURLToPath(import.meta.url));
 	const preludeFile = join(srcDir, "prelude.yali");
-	const preludeSrc = readFileSync(preludeFile, "utf-8");
-	return seval(preludeSrc, getInterpreter().globalEnv);
+	const preludeSrc = fs.readFileSync(preludeFile, "utf-8");
+	return seval(preludeSrc, env, preludeFile);
 }
 
 export function seval(source, env, file) {

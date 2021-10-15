@@ -24,6 +24,7 @@ export const DefaultColors = IMap([
 	[Keyword.for("#string"), FgBlue],
 ]);
 
+// todo cyclical references
 export function print(form, colors = IMap()) {
 	function applyColor(keyword, s) {
 		return colors.has(keyword) ? applyCode(colors.get(keyword), s) : s;

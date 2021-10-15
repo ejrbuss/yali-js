@@ -11,8 +11,7 @@ import { print, printTag } from "./printer.js";
 import { Special } from "./symbols.js";
 
 export class Interface {
-	constructor(name, typeArgsShape, fallback, defHook) {
-		this[Special.name] = name;
+	constructor(typeArgsShape, fallback, defHook) {
 		this.methodTable = IMap();
 		this.typeArgsShape = typeArgsShape;
 		this.fallback = fallback;
@@ -26,6 +25,7 @@ export class Interface {
 
 	defMethod(typeArgs, impl) {
 		assertType(ListConstructor, typeArgs);
+		impl = ProcConstructor(impl);
 		if (typeArgs.size !== this.typeArgsShape.size) {
 			const method = this.typeArgsToMethodSignature(typeArgs);
 			throw new Error(
@@ -58,6 +58,10 @@ export class Interface {
 
 	typeArgsToMethodSignature(typeArgs) {
 		return typeArgs.map(typeName).unshift(this[Special.name]).map(Symbol.for);
+	}
+
+	["get-method"](typeArgs) {
+		return this.methodTable.get(typeArgs);
 	}
 }
 
@@ -162,6 +166,8 @@ export function InterfaceConstructor(a) {
 	return a;
 }
 
+export function ProtocolConstructor(a) {}
+
 export function ListConstructor(...args) {
 	return IList(args);
 }
@@ -248,18 +254,13 @@ JsConstructorToConstructor.set(Interface, InterfaceConstructor);
 const unaryTypeArgs = List.of(Symbol.for("a"));
 const binaryTypeArgs = List.of(Symbol.for("a"), Symbol.for("b"));
 
-export const toBool = new Interface("to-Bool", unaryTypeArgs);
-export const toNum = new Interface("to-Num", unaryTypeArgs);
-export const toStr = new Interface("to-Str", unaryTypeArgs, (s) => print(s));
-export const toProc = new Interface("to-Proc", unaryTypeArgs);
-export const first = new Interface("first", unaryTypeArgs);
-export const rest = new Interface("rest", unaryTypeArgs);
-export const count = new Interface("count", unaryTypeArgs);
-export const isEmpty = new Interface(
-	"empty?",
-	unaryTypeArgs,
-	(xs) => count.dispatch(xs) === 0
-);
+export const toBool = new Interface(unaryTypeArgs);
+export const toNum = new Interface(unaryTypeArgs);
+export const toStr = new Interface(unaryTypeArgs, (s) => print(s));
+export const toProc = new Interface(unaryTypeArgs);
+export const first = new Interface(unaryTypeArgs);
+export const rest = new Interface(unaryTypeArgs);
+export const isEmpty = new Interface(unaryTypeArgs);
 
 function defHashHook(type, impl) {
 	if (typeof type === "function") {
@@ -274,12 +275,7 @@ function defHashHook(type, impl) {
 	throw new Error(`Could not hook hashCode for type ${print(type)}!`);
 }
 
-export const hash = new Interface(
-	"#",
-	unaryTypeArgs,
-	(a) => a.hash,
-	defHashHook
-);
+export const hash = new Interface(unaryTypeArgs, (a) => ihash(a), defHashHook);
 
 function defEqHook(type, impl) {
 	if (typeof type === "function") {
@@ -295,7 +291,6 @@ function defEqHook(type, impl) {
 }
 
 export const BinaryEq = new Interface(
-	"binary=",
 	binaryTypeArgs,
 	(a, b) => a === b,
 	defEqHook

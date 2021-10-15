@@ -1,12 +1,15 @@
 export const Special = {
-	name: Symbol("#yali-name"),
-	jsConstructor: Symbol("#yali-js-constructor"),
-	sourceRef: Symbol("#yali-source-ref"),
-	macro: Symbol("#yali-macro"),
-	proc: Symbol("#yali-proc"),
-	stack: Symbol("#yali-stack"),
-	params: Symbol("#yali-params"),
-	body: Symbol("#yali-body"),
+	name: Symbol("#__name"),
+	jsConstructor: Symbol("#__js-constructor"),
+	sourceRef: Symbol("#__source-ref"),
+	macro: Symbol("#__macro"),
+	proc: Symbol("#__proc"),
+	stack: Symbol("#__stack"),
+	params: Symbol("#__params"),
+	body: Symbol("#__body"),
+	builtin: Symbol("#__builtin"),
+	// bound in each proc call
+	this: Symbol.for("@"),
 };
 
 export const ConstructorSymbols = {
@@ -16,25 +19,28 @@ export const ConstructorSymbols = {
 
 export const SpecialForms = {
 	Def: Symbol.for("def"),
-	Undef: Symbol.for("undef"),
+	DefProc: Symbol.for("def-proc"),
+	DefMacro: Symbol.for("def-macro"),
+	DefType: Symbol.for("def-type"),
+	DefInterface: Symbol.for("def-interface"),
+	DefMethod: Symbol.for("def-method"),
 	If: Symbol.for("if"),
 	Do: Symbol.for("do"),
 	Recur: Symbol.for("recur"),
 	Throw: Symbol.for("throw"),
 	Try: Symbol.for("try"),
 	Catch: Symbol.for("catch"),
+	Async: Symbol.for("async"),
+	Await: Symbol.for("await"),
 	Let: Symbol.for("let"),
 	Match: Symbol.for("match"),
 	Proc: Symbol.for("proc"),
-	Macro: Symbol.for("macro"),
-	Interface: Symbol.for("interface"),
 	MacroExpand: Symbol.for("macro-expand"),
 	Quote: Symbol.for("quote"),
 	QuasiQuote: Symbol.for("quasi-quote"),
 	Unquote: Symbol.for("unquote"),
 	UnquoteSplice: Symbol.for("unquote-splice"),
 	Splice: Symbol.for("..."),
-	Async: Symbol.for("async"),
-	Await: Symbol.for("await"),
-	Type: Symbol.for("type"), // todo
+	Dot: Symbol.for("."),
+	Set: Symbol.for("set!"),
 };

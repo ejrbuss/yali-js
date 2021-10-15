@@ -1,56 +1,30 @@
-(def *global-env* (env))
+(def *root-env* (__env))
 
 ;; temporary and bad
 (def reload (proc ()
-	(eval (read-file "./src/prelude.yali" "utf-8") *global-env*)))
+	(eval (js.fs.readFileSync "./src/prelude.yali" "utf-8") *root-env*)))
 
 (def log (proc (... args)
+	(def write process.stdout.write)
 	(for-each (proc (a)
-			(write-stdout a)
-			(write-stdout " "))
+			(write a)
+			(write " "))
 		args)
-	(write-stdout "\n")
+	(write "\n")
 	nil))
 
 ;; Bootsrap basic list operations
 
-(bind-call-property first "defMethod" [List]
-	(proc (list)
-		(bind-call-property list "first")))
+(def-method (first List) (proc (list)
+	(list.first)))
 
-(bind-call-property rest "defMethod" [List]
-	(proc (list)
-		(bind-call-property list "rest")))
+(def-method (rest List) (proc (list)
+	(list.rest)))
 
-(bind-call-property count "defMethod" [List]
-	(proc (list)
-		(get-property list "size")))
-
-(bind-call-property empty? "defMethod" [List]
-	(proc (list)
-		(bind-call-property list "isEmpty")))
+(def-method (empty? List) (proc (list)
+	(list.isEmpty)))
 
 ;; Basic macros
-
-(def def-macro (macro (signature ... body)
-	(let (
-		name (first signature)
-		params (rest signature))
-		`(def ,name (macro ,params ,,, body)))))
-
-(def-macro (def-proc signature ... body)
-	(let (
-		name (first signature)
-		params (rest signature))
-		`(def ,name (proc ,params ,,, body))))
-
-(def-macro (def-interface signature fallback)
-	(let (
-		name (first signature))
-		`(def ,name (interface ,signature ,fallback))))
-
-(def-macro (def-method [interface ... type-args] impl)
-	`(bind-call-property ,interface "defMethod" [,,,type-args] ,impl))
 
 ;; TODO fallthrouuugh should result in error, not nil!
 (def-macro (def-macros ... defs)
@@ -78,10 +52,6 @@
 		cases (flatten (map def-to-case (chunk 2 defs))))
 		`(def-proc (,name ... args) (match args ,,, cases))))
 
-;; (def-macro (~ ... args)
-;; 	(def-proc (inner form n)
-;; 		(List?)
-
 (def-macros
 	(and) true
 	(and a) a
@@ -107,24 +77,24 @@
 	(if a false true))
 
 (def-procs
-	(. f) f
-	(. f g) (proc (... args) (f (g ... args)))
-	(. f ... gs) (proc (... args) (f ((. ... gs) ... args))))
+	(compose f) f
+	(compose f g) (proc (... args) (f (g ... args)))
+	(compose f ... gs) (proc (... args) (f ((. ... gs) ... args))))
 
 (def-proc (Nil? a) (binary= nil a))
-(def-proc (Bool? a) (binary= "boolean" (js-type-of a)))
-(def-proc (Str? a) (binary= "string" (js-type-of a)))
-(def-proc (Sym? a) (binary= "symbol" (js-type-of)))
+(def-proc (Bool? a) (binary= "boolean" (js.typeof a)))
+(def-proc (Str? a) (binary= "string" (js.typeof a)))
+(def-proc (Sym? a) (binary= "symbol" (js.typeof a)))
 (def-proc (Keyword? a) (binary= Keyword (type-of a)))
 (def-proc (List? a) (binary= List (type-of a)))
 (def-proc (Map? a) (binary= Map (type-of a)))
-(def-proc (Proc? a) (binary= "function" (js-type-of)))
+(def-proc (Proc? a) (binary= "function" (js.typeof)))
 (def-proc (Interface? a) (binary= Interface (type-of a)))
 
 ;; proc methods
 
 (def-method (to-Proc Interface) (proc (i)
-	(get-property i "dispatch")))
+	i.dispatch))
 
 ;; nil methods
 
@@ -136,14 +106,14 @@
 (def-interface (inc a))
 (def-interface (dec a))
 
-(def-method (inc Num) (proc (a) (js+ a 1)))
-(def-method (dec Num) (proc (a) (js- a 1)))
+(def-method (inc Num) (proc (a) (js.++ a)))
+(def-method (dec Num) (proc (a) (js.-- a)))
 
 (def-interface (unary+ a))
 (def-interface (binary+ a b))
 
 (def-method (unary+ Num) id)
-(def-method (binary+ Num Num) js+)
+(def-method (binary+ Num Num) js.+)
 
 (def-procs
 	(+) 0
@@ -154,8 +124,8 @@
 (def-interface (unary- a))
 (def-interface (binary- a b))
 
-(def-method (unary- Num) js-neg)
-(def-method (binary- Num Num) js-)
+(def-method (unary- Num) js.u-)
+(def-method (binary- Num Num) js.-)
 
 (def-procs
 	(-) 0
@@ -167,7 +137,7 @@
 (def-interface (binary* a b))
 
 (def-method (unary* Num) id)
-(def-method (binary* Num Num) js*)
+(def-method (binary* Num Num) js.*)
 
 (def-procs
 	(*) 1
@@ -179,7 +149,7 @@
 (def-interface (binary/ a b))
 
 (def-method (unary/ Num) id)
-(def-method (binary/ Num Num) js/)
+(def-method (binary/ Num Num) js./)
 
 (def-procs
 	(/) 1
@@ -189,46 +159,56 @@
 
 (def-interface (pow a b))
 
-(def-method (pow Num Num) js-pow)
+(def-method (pow Num Num) js.Math.pow)
 
 (def-interface (mod a b))
 
-(def-method (mod Num Num) js-mod)
+(def-method (mod Num Num) js.%)
 
 (def-interface (floor a))
-(def-interface (ciel a))
+(def-interface (ceil a))
 (def-interface (round a))
 
-(def-method (floor Num) (proc (a) (bind-call-property js-math "floor" a)))
-(def-method (ciel Num) (proc (a) (bind-call-property js-math "ciel" a)))
-(def-method (round Num) (proc (a) (bind-call-property js-math "round" a)))
+(def-method (floor Num) js.Math.floor)
+(def-method (ceil Num) js.Math.ceil)
+(def-method (round Num) js.Math.round)
 
 (def-interface (rand a) (proc (... args)
 	;; fallback is expected for most calls
 	(if (empty? args)
-		(bind-call-property js-math "random")
+		(js.Math.random)
 		;; todo better error handling here
-		((bind-call-property rand "getMethod" [(first args)]) ... args))))
+		((rand.get-method [(first args)]) ... args))))
 
 (def-method (rand Num) (proc (... args)
-	(let (
-		n (bind-call-property js-math "random"))
-		(match args
-			[] n
-			[max] (floor (* n max))
-			[min max] (floor (+ min (* n (- max min))))))))
+	(match args
+		[] (js.Math.random)
+		[max] (floor (* (js.Math.random) max))
+		[min max] (floor (+ min (* (js.Math.random) (- max min)))))))
 
 (def-method (rand List)	(proc (list)
 	(nth list (rand (count list)))))
 
+;; ((get Math floor))
+;; (set! Math floor "")
+;; (def Point (type (self x y)
+;;		(def-prop self.x x) ; assign and create proc self.x
+;;      (def-prop self.y y)))
+;;
+;; as special forms::
+;; def def-macro def-type def-prop
+
+;; (def-struct (Point x { :type NUm } y { :type NUm }))
 ;; ordering
+
+
 
 ;; iterator methods
 
 (def-interface (nth a)) ;; todo fallback
 
 (def-method (nth List) (proc (a ... args)
-	(bind-call-property a "get" ... args)))
+	(a.get ... args)))
 
 ;; structural
 

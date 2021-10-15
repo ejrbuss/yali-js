@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 const Dirname = dirname(fileURLToPath(import.meta.url));
 
 let passes = 0;
+let currentSuite;
 
 const Fails = [];
 const Errors = [];
@@ -25,15 +26,11 @@ function printSuccess(name) {
 }
 
 function printFail(name, error) {
-	console.log(applyCode(FgRed, ` ✘ ${name}\n`));
-	console.log(error);
-	console.log();
+	console.log(applyCode(FgRed, ` ✘ ${name}`));
 }
 
 function printError(name, error) {
-	console.log(applyCode(FgYellow, ` ✘ ${name}\n`));
-	console.log(error);
-	console.log();
+	console.log(applyCode(FgYellow, ` ✘ ${name}`));
 }
 
 export function test(name, testFunction) {
@@ -42,13 +39,17 @@ export function test(name, testFunction) {
 		passes += 1;
 		printSuccess(name);
 	} catch (error) {
+		const qualifiedName = currentSuite + " - " + name;
 		if (error instanceof assert.AssertionError) {
-			Fails.push([name, error]);
+			Fails.push([qualifiedName, error]);
 			printFail(name, error);
 		} else {
-			Errors.push([name, error]);
+			Errors.push([qualifiedName, error]);
 			printError(name, error);
 		}
+		console.log();
+		console.log(error);
+		console.log();
 	}
 }
 
@@ -60,12 +61,12 @@ export async function testMain() {
 		.split("\n");
 	for (const testFile of testFiles) {
 		try {
-			const basename = testFile.replace(Dirname + "/", "");
-			if (basename === "test.js") {
+			currentSuite = testFile.replace(Dirname + "/", "");
+			if (currentSuite === "test.js") {
 				continue;
 			}
-			console.log(`\n${header} Running tests in ${basename} ...\n`);
-			await import(`./${basename}`);
+			console.log(`\n${header} Running tests in ${currentSuite} ...\n`);
+			await import(`./${currentSuite}`);
 		} catch (error) {
 			console.log();
 			console.log(error);
@@ -74,14 +75,14 @@ export async function testMain() {
 	}
 	if (Fails.length > 0) {
 		console.log(`\n${header} Test failures\n`);
-		for (const [name, error] of Fails) {
-			printFail(name, error);
+		for (const [name] of Fails) {
+			printFail(name);
 		}
 	}
 	if (Errors.length > 0) {
 		console.log(`\n${header} Test errors\n`);
-		for (const [name, error] of Errors) {
-			printError(name, error);
+		for (const [name] of Errors) {
+			printError(name);
 		}
 	}
 	let passesText = applyCode(FgGreen, passes);
