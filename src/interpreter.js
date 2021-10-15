@@ -85,7 +85,6 @@ export class Interpreter {
 		}
 		if (isList(form)) {
 			this.currentApp = form;
-			// console.log(print(form));
 			let [operator, ...operands] = form;
 			if (typeof operator === "symbol") {
 				// special forms

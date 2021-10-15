@@ -211,6 +211,3 @@
 	(a.get ... args)))
 
 ;; structural
-
-;; todo for procs and interfaces
-;; (def-proc (signature p)
