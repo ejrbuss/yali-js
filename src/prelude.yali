@@ -13,20 +13,20 @@
 	(write "\n")
 	nil))
 
-;; Bootsrap basic list operations
+;; Bootstrap basic list operations
 
-(def-method (first List) (proc (list)
+(def-impl (first List) (proc (list)
 	(list.first)))
 
-(def-method (rest List) (proc (list)
+(def-impl (rest List) (proc (list)
 	(list.rest)))
 
-(def-method (empty? List) (proc (list)
+(def-impl (empty? List) (proc (list)
 	(list.isEmpty)))
 
 ;; Basic macros
 
-;; TODO fallthrouuugh should result in error, not nil!
+;; TODO fallthrough should result in error, not nil!
 (def-macro (def-macros ... defs)
 	(def-proc (def-to-case def)
 		;; todo assert names match
@@ -93,27 +93,27 @@
 
 ;; proc methods
 
-(def-method (to-Proc Interface) (proc (i)
+(def-impl (to-Proc Interface) (proc (i)
 	i.dispatch))
 
 ;; nil methods
 
-(def-method (to-Bool Nil) (proc () false))
-(def-method (to-Str Nil) (proc () ""))
+(def-impl (to-Bool Nil) (proc () false))
+(def-impl (to-Str Nil) (proc () ""))
 
 ;; numeric operators
 
 (def-interface (inc a))
 (def-interface (dec a))
 
-(def-method (inc Num) (proc (a) (js.++ a)))
-(def-method (dec Num) (proc (a) (js.-- a)))
+(def-impl (inc Num) (proc (a) (js.++ a)))
+(def-impl (dec Num) (proc (a) (js.-- a)))
 
 (def-interface (unary+ a))
 (def-interface (binary+ a b))
 
-(def-method (unary+ Num) id)
-(def-method (binary+ Num Num) js.+)
+(def-impl (unary+ Num) id)
+(def-impl (binary+ Num Num) js.+)
 
 (def-procs
 	(+) 0
@@ -124,8 +124,8 @@
 (def-interface (unary- a))
 (def-interface (binary- a b))
 
-(def-method (unary- Num) js.u-)
-(def-method (binary- Num Num) js.-)
+(def-impl (unary- Num) js.u-)
+(def-impl (binary- Num Num) js.-)
 
 (def-procs
 	(-) 0
@@ -136,8 +136,8 @@
 (def-interface (unary* a))
 (def-interface (binary* a b))
 
-(def-method (unary* Num) id)
-(def-method (binary* Num Num) js.*)
+(def-impl (unary* Num) id)
+(def-impl (binary* Num Num) js.*)
 
 (def-procs
 	(*) 1
@@ -148,8 +148,8 @@
 (def-interface (unary/ a))
 (def-interface (binary/ a b))
 
-(def-method (unary/ Num) id)
-(def-method (binary/ Num Num) js./)
+(def-impl (unary/ Num) id)
+(def-impl (binary/ Num Num) js./)
 
 (def-procs
 	(/) 1
@@ -159,34 +159,35 @@
 
 (def-interface (pow a b))
 
-(def-method (pow Num Num) js.Math.pow)
+(def-impl (pow Num Num) js.Math.pow)
 
 (def-interface (mod a b))
 
-(def-method (mod Num Num) js.%)
+(def-impl (mod Num Num) js.%)
 
 (def-interface (floor a))
 (def-interface (ceil a))
 (def-interface (round a))
 
-(def-method (floor Num) js.Math.floor)
-(def-method (ceil Num) js.Math.ceil)
-(def-method (round Num) js.Math.round)
+(def-impl (floor Num) js.Math.floor)
+(def-impl (ceil Num) js.Math.ceil)
+(def-impl (round Num) js.Math.round)
 
-(def-interface (rand a) (proc (... args)
+(def-interface (rand a) {
+	:default-impl (proc (... args)
 	;; fallback is expected for most calls
 	(if (empty? args)
 		(js.Math.random)
 		;; todo better error handling here
-		((rand.get-method [(first args)]) ... args))))
+		((rand.get-method [(first args)]) ... args))) })
 
-(def-method (rand Num) (proc (... args)
+(def-impl (rand Num) (proc (... args)
 	(match args
 		[] (js.Math.random)
 		[max] (floor (* (js.Math.random) max))
 		[min max] (floor (+ min (* (js.Math.random) (- max min)))))))
 
-(def-method (rand List)	(proc (list)
+(def-impl (rand List)	(proc (list)
 	(nth list (rand (count list)))))
 
 ;; ((get Math floor))
@@ -207,7 +208,14 @@
 
 (def-interface (nth a)) ;; todo fallback
 
-(def-method (nth List) (proc (a ... args)
+(def-impl (nth List) (proc (a ... args)
 	(a.get ... args)))
 
 ;; structural
+
+;; import/export
+
+;; (export def x 4)
+;; (import "my-module" {}) ; file extension exculded
+;; (import-as vec "my-vec-module" {}) ; file extension excluded
+;; (module "name" {} ...) ; name will be appended to the file module it is present in, but can be overriden

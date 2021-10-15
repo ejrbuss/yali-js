@@ -15,12 +15,10 @@ import {
 	InterfaceConstructor,
 } from "./types.js";
 
-// TODO reserved words in environment!
-
 export class Interpreter {
 	static running;
 	static #MacroCache = new Map();
-	//
+
 	constructor() {
 		this.globalEnv = new Env("root");
 		this.currentEnv = this.globalEnv;
@@ -72,7 +70,6 @@ export class Interpreter {
 	}
 
 	#interp(form, env) {
-		this.currentEnv = env;
 		if (typeof form === "symbol") {
 			let interped = env[form];
 			if (typeof interped !== "undefined") {
@@ -84,8 +81,10 @@ export class Interpreter {
 			this.#throw(new Error(printTag`Symbol ${form} is not defined!`));
 		}
 		if (isList(form)) {
+			this.currentEnv = env;
 			this.currentApp = form;
-			let [operator, ...operands] = form;
+			const operands = form.toArray();
+			let operator = operands.shift();
 			if (typeof operator === "symbol") {
 				// special forms
 				if (operator in this) {
@@ -102,7 +101,7 @@ export class Interpreter {
 			}
 			// Try to convert to proc
 			if (typeof operator !== "function") {
-				if (operator instanceof Interface) {
+				if (operator && operator instanceof Interface) {
 					operator = operator.dispatch;
 				} else {
 					operator = this.#wrapExternal(() => ProcConstructor(operator));
@@ -289,7 +288,6 @@ export class Interpreter {
 	}
 
 	#expandMacro(macro, operands) {
-		/** @type {IMap} */
 		let cache;
 		if (Interpreter.#MacroCache.has(macro)) {
 			cache = Interpreter.#MacroCache.get(macro);
@@ -344,44 +342,38 @@ export class Interpreter {
 		});
 		const name = signature.first();
 		const params = signature.rest();
-		const Anonymmous = class {};
+		const Anonymous = class {};
 		const proc = this[SpecialForms.Proc]([params, ...body], env);
+		// TODO arity
 		const constructor = (...args) => {
-			const target = new Anonymmous();
+			const target = new Anonymous();
 			proc.apply(target, args);
 			return target;
 		};
 		constructor[Special.name] = name.description;
+		constructor[Special.jsConstructor] = Anonymous;
+		Anonymous[Special.yaliConstructor] = constructor;
 		return this[SpecialForms.Def]([name, constructor], env);
 	}
 
 	[SpecialForms.DefInterface](operands, env) {
 		const signature = operands[0];
-		const fallback = operands[1];
-		this.#wrapExternal(() => {
-			assertType(ListConstructor, signature);
-			signature.forEach((name) => assertType(SymConstructor, name));
-		});
-		const name = signature.first();
-		let interpedFallback = this.#interp(fallback, env);
-		if (typeof interpedFallback !== "undefined") {
-			interpedFallback = this.#wrapExternal(() =>
-				ProcConstructor(interpedFallback)
-			);
-		}
-		const iface = new Interface(signature.rest(), interpedFallback);
-		iface[Special.name] = name.description;
-		return this[SpecialForms.Def]([name, iface], env);
+		const options = operands[1];
+		const interpedOptions = this.#interp(options, env);
+		const iface = this.#wrapExternal(
+			() => new Interface(signature, interpedOptions)
+		);
+		return this[SpecialForms.Def]([iface[Special.name], iface], env);
 	}
 
-	[SpecialForms.DefMethod](operands, env) {
+	[SpecialForms.DefImpl](operands, env) {
 		const signature = operands[0];
 		const impl = operands[1];
 		this.#wrapExternal(() => assertType(ListConstructor, signature));
 		const [iface, ...typeArgs] = this.#interpOperands([...signature], env);
 		this.#wrapExternal(() => assertType(InterfaceConstructor, iface));
 		const interpedImpl = this.#interp(impl, env);
-		this.#wrapExternal(() => iface.defMethod(IList(typeArgs), interpedImpl));
+		this.#wrapExternal(() => iface["def-impl"](IList(typeArgs), interpedImpl));
 		return iface;
 	}
 
@@ -480,7 +472,7 @@ export class Interpreter {
 		const [params, ...body] = operands;
 		this.#wrapExternal(() => assertType(ListConstructor, params));
 		const paramsList = params.unshift(ConstructorSymbols.List);
-		// Specialize proc implementation, basedd on body length
+		// Specialize proc implementation, based on body length
 		let anonymous;
 		if (body.length === 0) {
 			anonymous = (...args) => {

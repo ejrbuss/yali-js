@@ -1,4 +1,4 @@
-import { List as IList, List } from "immutable";
+import { List as IList } from "immutable";
 import { Keyword } from "./keyword.js";
 import { Scanner } from "./scanner.js";
 import { ConstructorSymbols, Special, SpecialForms } from "./symbols.js";
@@ -10,6 +10,12 @@ const ReString = /^"((\\.)|[^"])*"/;
 const ReSymbol = /^[^\s#;\(\)\[\]\{\}"]+/;
 const ReNumber = /^[+-]?(\d+|\.\d+|\d+\.\d+|\d+\.)(e[+-]?\d+)?$/;
 
+// TODO support literal -Infinity, Infinity
+// TODO support different base integers (0b 0o 0x)
+// TODO support commas in numbers
+// TODO change comment syntax to -- and ---
+// TODO capture --- comments and attach them to the next form as Special.help
+// tODO capture :: as Special.protocol
 export function read(source, file = "<anonymous>") {
 	const scanner = new Scanner(source, file);
 
@@ -32,7 +38,7 @@ export function read(source, file = "<anonymous>") {
 		if (scanner.scanString("'")) {
 			return IList.of(SpecialForms.Quote, readForm());
 		}
-		// Quasit-quote
+		// Quasi-quote
 		if (scanner.scanString("`")) {
 			return IList.of(SpecialForms.QuasiQuote, readForm());
 		}

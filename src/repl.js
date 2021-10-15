@@ -2,7 +2,7 @@ import repl from "repl";
 import { applyCode, Dim } from "./ansi.js";
 import { DefaultColors, print } from "./printer.js";
 import { IncompleteForm } from "./reader.js";
-import { getInterpreter, seval } from "./builtins.js";
+import { getInterpreter, sourceEval } from "./builtins.js";
 import { Special } from "./symbols.js";
 
 const interpreter = getInterpreter();
@@ -10,7 +10,7 @@ const replEnv = interpreter.globalEnv.extendEnv("repl");
 
 function evalInput(input, _ctx, file, callback) {
 	try {
-		callback(null, seval(input, replEnv, file));
+		callback(null, sourceEval(input, replEnv, file));
 	} catch (error) {
 		if (error instanceof IncompleteForm) {
 			callback(new repl.Recoverable(error));

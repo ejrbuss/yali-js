@@ -1,5 +1,7 @@
 export const Special = {
+	// unique symbols
 	name: Symbol("#__name"),
+	yaliConstructor: Symbol("#__yali-constructor"),
 	jsConstructor: Symbol("#__js-constructor"),
 	sourceRef: Symbol("#__source-ref"),
 	macro: Symbol("#__macro"),
@@ -8,8 +10,10 @@ export const Special = {
 	params: Symbol("#__params"),
 	body: Symbol("#__body"),
 	builtin: Symbol("#__builtin"),
-	// bound in each proc call
-	this: Symbol.for("@"),
+	help: Symbol("#__help"),
+	protcol: Symbol("#__protocol"),
+	// common symbols
+	this: Symbol.for("this"),
 };
 
 export const ConstructorSymbols = {
@@ -23,7 +27,7 @@ export const SpecialForms = {
 	DefMacro: Symbol.for("def-macro"),
 	DefType: Symbol.for("def-type"),
 	DefInterface: Symbol.for("def-interface"),
-	DefMethod: Symbol.for("def-method"),
+	DefImpl: Symbol.for("def-impl"),
 	If: Symbol.for("if"),
 	Do: Symbol.for("do"),
 	Recur: Symbol.for("recur"),

@@ -1,18 +1,26 @@
+import { freezeOwnProperties } from "./util.js";
+
 export class Keyword {
-	static KeywordCache = {};
+	static #KeywordRegistry = {};
+	name;
 
 	constructor(name) {
 		this.name = name;
+		// Keywords should not permit any modification
+		Object.freeze(this);
 	}
 
 	static for(name) {
-		const cache = Keyword.KeywordCache;
-		let keyword = cache[name];
-		if (typeof keyword !== "undefined") {
-			return keyword;
+		const internedKeyword = Keyword.#KeywordRegistry[name];
+		if (typeof internedKeyword !== "undefined") {
+			return internedKeyword;
 		}
-		keyword = new Keyword(name);
-		cache[name] = keyword;
-		return keyword;
+		const newKeyword = new Keyword(name);
+		Keyword.#KeywordRegistry[name] = newKeyword;
+		return newKeyword;
 	}
 }
+
+// Protect methods
+freezeOwnProperties(Keyword);
+freezeOwnProperties(Keyword.prototype);

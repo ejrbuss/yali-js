@@ -40,7 +40,7 @@ export function addBuiltins(env) {
 		Num: NumConstructor,
 		Str: StrConstructor,
 		Sym: SymConstructor,
-		Keywordd: KeywordConstructor,
+		Keyword: KeywordConstructor,
 		List: ListConstructor,
 		Map: MapConstructor,
 		Proc: ProcConstructor,
@@ -67,7 +67,7 @@ export function addBuiltins(env) {
 		// meta
 		read: read,
 		print: print,
-		eval: seval,
+		eval: sourceEval,
 		// interop
 		js: JsProxy,
 		// Specials
@@ -179,10 +179,10 @@ export function addPrelude(env) {
 	const srcDir = dirname(fileURLToPath(import.meta.url));
 	const preludeFile = join(srcDir, "prelude.yali");
 	const preludeSrc = fs.readFileSync(preludeFile, "utf-8");
-	return seval(preludeSrc, env, preludeFile);
+	return sourceEval(preludeSrc, env, preludeFile);
 }
 
-export function seval(source, env, file) {
+export function sourceEval(source, env, file) {
 	assertType(StrConstructor, source);
 	file && assertType(StrConstructor, file);
 	const interpreter = getInterpreter();
@@ -264,7 +264,33 @@ export function flatten(xs) {
 	const acc = [];
 	const iter = toJsIter(xs);
 	for (const x of iter) {
-		acc.push(...x);
+		const xIter = toJsIter(x);
+		acc.push(...xIter);
 	}
 	return IList(acc);
+}
+
+error[Special.help] = `Creates a new \`Error\` instance
+
+# Syntax
+\`\`\`yali
+(error)
+(error message)
+(error message data)
+\`\`\`
+
+# Parameters
+\`message\` :: (protocol to-Str)
+: A human-readable description of the error.
+\`data\` :: Map (default \`nil\`)
+: A map of data to attach to this error under the property \`data\`.`;
+export function error(message, data) {
+	if (typeof message !== "undefined") {
+		message = StrConstructor(message);
+	}
+	const error = new Error(message);
+	if (typeof data !== "undefined") {
+		error.data = assertType(MapConstructor, data);
+	}
+	return error;
 }
