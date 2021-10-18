@@ -21,11 +21,48 @@ export const DefaultColors = IMap([
 	[Keyword.for("sym"), ""],
 	[Keyword.for("keyword"), FgGreen],
 	[Keyword.for("punc"), ""],
-	[Keyword.for("#string"), FgBlue],
+	[Keyword.for("pound-str"), FgBlue],
 ]);
 
-// todo cyclical references
-export function print(form, colors = IMap()) {
+// TODO handle circular references
+export function print(form) {
+	if (typeof form === "undefined") {
+		return "nil";
+	}
+	if (typeof form === "boolean") {
+		return JSON.stringify(form);
+	}
+	if (typeof form === "number") {
+		return JSON.stringify(form);
+	}
+	if (typeof form === "string") {
+		return JSON.stringify(form);
+	}
+	if (typeof form === "symbol") {
+		return form.description ?? "";
+	}
+	if (form instanceof Keyword) {
+		return `:${form.name}`;
+	}
+	if (isList(form)) {
+		return `(${form.map(print).join(" ")})`;
+	}
+	if (isMap(form)) {
+		return `{${[...form.entries()].flat(1).map(print).join(" ")}}`;
+	}
+	if (typeof form === "function") {
+		let name = form[Special.name] ?? form.name ?? "anonymous";
+		return `#<${name}::proc>`;
+	}
+	if (typeof form === "object" && form !== null) {
+		let name = form[Special.name] ?? "";
+		let type = form.constructor[Special.name] ?? form.constructor.name;
+		return `#<${name}::${type}>`;
+	}
+	return `#<js"${form}">`;
+}
+
+export function colorPrint(form, colors = DefaultColors) {
 	function applyColor(keyword, s) {
 		return colors.has(keyword) ? applyCode(colors.get(keyword), s) : s;
 	}
@@ -49,13 +86,13 @@ export function print(form, colors = IMap()) {
 	}
 	if (isList(form)) {
 		return `${applyColor(punc, "(")}${form
-			.map((a) => print(a, colors))
+			.map((a) => colorPrint(a, colors))
 			.join(" ")}${applyColor(punc, ")")}`;
 	}
 	if (isMap(form)) {
 		return `${applyColor(punc, "{")}${[...form.entries()]
 			.flat(1)
-			.map((a) => print(a, colors))
+			.map((a) => colorPrint(a, colors))
 			.join(" ")}${applyColor(punc, "}")}`;
 	}
 	if (typeof form === "function") {

@@ -112,15 +112,15 @@ testInterp(
 );
 testInterp(
 	"Eval does not write to current env by default",
-	'(def x 2) (eval "(def x 4)") x',
+	"(def x 2) (eval '(def x 4)) x",
 	"2"
 );
 testInterp(
 	"Eval does not read from local env by default",
-	'(let () (def x 4) (try (eval "x") 2))',
+	"(let () (def x 4) (try (eval 'x) 2))",
 	"2"
 );
-testInterp("Eval can define", '(def e (__env)) (eval "(def x 4)" e) x', "4");
+testInterp("Eval can define", "(def e (__env)) (eval '(def x 4) e) x", "4");
 
 // TODO test Let custom type bindings
 // TODO test Throw (need to be able to create an error)

@@ -67,7 +67,7 @@ export function addBuiltins(env) {
 		// meta
 		read: read,
 		print: print,
-		eval: sourceEval,
+		eval: evalForm,
 		// interop
 		js: JsProxy,
 		// Specials
@@ -179,20 +179,14 @@ export function addPrelude(env) {
 	const srcDir = dirname(fileURLToPath(import.meta.url));
 	const preludeFile = join(srcDir, "prelude.yali");
 	const preludeSrc = fs.readFileSync(preludeFile, "utf-8");
-	return sourceEval(preludeSrc, env, preludeFile);
+	const preludeForms = read(preludeSrc);
+	preludeForms.forEach((form) => evalForm(form, env));
 }
 
-export function sourceEval(source, env, file) {
-	assertType(StrConstructor, source);
-	file && assertType(StrConstructor, file);
+export function evalForm(form, env) {
 	const interpreter = getInterpreter();
 	const evalEnv = env ?? interpreter.globalEnv.extendEnv("eval");
-	const forms = read(source, file);
-	let result;
-	for (const form of forms) {
-		result = interpreter.interp(form, evalEnv);
-	}
-	return result;
+	return interpreter.interp(form, evalEnv);
 }
 
 export function env() {

@@ -44,8 +44,9 @@ export class Interpreter {
 
 	#throw(error) {
 		if (typeof error === "object" && error !== null) {
+			const jsStack = error.stack;
 			const currentStack = error[Special.stack];
-			if (typeof currentStack === "undefined") {
+			if (jsStack && typeof currentStack === "undefined") {
 				// TODO do better
 				const form = this.currentApp;
 				if (form) {
@@ -173,6 +174,8 @@ export class Interpreter {
 				const iterable = this.#wrapExternal(() => toJsIter(value));
 				const iterator = iterable[Symbol.iterator]();
 				let spliced = false;
+				// TODO support nesting the slice to get last element
+				// eg. (first ... middle last)
 				operands.forEach((operand) => {
 					if (spliced) {
 						this.#throw(
@@ -194,9 +197,12 @@ export class Interpreter {
 			}
 			if (type === ConstructorSymbols.Map && isMap(value)) {
 				// TODO support splice by maintaining a spliced map
+				let remaining = value;
 				const length = operands.length;
 				for (let i = 0; i < length; i += 2) {
 					const key = operands[i];
+					if (key === SpecialForms.spliced) {
+					}
 					const interpedKey = this.#interp(key, env);
 					const operand = operands[i + 1];
 					this.#assignBinding(operand, value.get(interpedKey), env);
@@ -363,7 +369,7 @@ export class Interpreter {
 		const iface = this.#wrapExternal(
 			() => new Interface(signature, interpedOptions)
 		);
-		return this[SpecialForms.Def]([iface[Special.name], iface], env);
+		return this[SpecialForms.Def]([signature.first(), iface], env);
 	}
 
 	[SpecialForms.DefImpl](operands, env) {

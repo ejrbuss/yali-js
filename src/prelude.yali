@@ -216,6 +216,16 @@
 ;; import/export
 
 ;; (export def x 4)
-;; (import "my-module" {}) ; file extension exculded
-;; (import-as vec "my-vec-module" {}) ; file extension excluded
+;; (import "my-module.yali" {}) ;
+;; (import-as vec "my-vec-module.yali" {}) ; file extension excluded
 ;; (module "name" {} ...) ; name will be appended to the file module it is present in, but can be overriden
+;; support yali and js files
+
+;; (def (first list::(List Any))
+;;   (list.first))
+
+;; (List Any)
+
+(def-struct (Ratio num denom))
+;; syntactic sugarg for
+(def-struct (Ratio num: T denom: T) (forall T))

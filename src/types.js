@@ -134,7 +134,7 @@ export class Interface {
 	constructor(signature, options = IMap()) {
 		assertType(ListConstructor, signature);
 		signature.forEach((symbol) => assertType(SymConstructor, symbol));
-		let name = signature.first();
+		let nameSym = signature.first();
 		assertType(MapConstructor, options);
 		let onDef = options.get(OnDefKeyword);
 		if (typeof onDef !== "undefined") {
@@ -155,7 +155,7 @@ export class Interface {
 			// order.
 			dispatchOn = (args) => IList.of(args.map(typeOf));
 		}
-		this[Special.name] = name;
+		this[Special.name] = nameSym.description;
 		this.#implTable = IMap();
 		this.arity = signature.size - 1;
 		this.signature = signature;
@@ -215,11 +215,18 @@ export class Interface {
 		if (typeof this["default-impl"] !== "undefined") {
 			return this["default-impl"](...args);
 		}
+		const name = this[Special.name];
 		const sig = print(this.signature);
 		const printedArgs = print(IList(args));
-		throw new Error(
-			`The interface \`${sig}\` is not implemented for arguments: \`${printedArgs}\`!`
-		);
+		const implSigs = dispatchValues
+			.map((args) => print(this["impl-signature"](args)))
+			.join("\n\t");
+		const message = `The interface \`${name}\` is not implemented for arguments: \`${printedArgs}\`!
+
+To support this operation, implement one of the following:
+\t(def-impl ${implSigs} ...)
+`;
+		throw new Error(message);
 	}
 }
 
