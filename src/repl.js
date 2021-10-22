@@ -79,7 +79,7 @@ export function replFor(interpreter, options = { color: true, preview: true }) {
 
 	function replWriter(output) {
 		if (output && output instanceof Error) {
-			return output[Special.stack] ? output[Special.stack] : output.stack;
+			return (output[Special.stack] ?? "") + "\n" + output.stack;
 		}
 		return options.color ? colorPrint(output) : print(output);
 	}

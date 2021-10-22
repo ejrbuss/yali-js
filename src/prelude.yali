@@ -28,9 +28,6 @@
 (def-impl (empty? List) (proc (list)
 	(list.isEmpty)))
 
-(def-proc (second xs)
-	(first (first xs)))
-
 ;; Bootstrap asserts
 
 (def-macro (assert condition message)
@@ -45,43 +42,61 @@
 (def-macro (def-macros ... definitions)
 	(def-proc (match-case expected-name sig body)
 			(assert (binary= expected-name (first sig)))
-			`([,(rest sig)] ,body))
+			`([ ,,, (rest sig)] ,body))
 	(if (empty? definitions)
 		(throw (error "No matched cases for multi macro!"))
 		(let (
-			name (second definitions)
+			name (first (first definitions))
 			sig-body-pairs (chunk 2 definitions)
-			match-cases (map (proc (pair) (match-case name (first pair) (second pair))) sig-body-pairs))
+			match-cases (flatten (map (proc ([ sig body ]) (match-case name sig body)) sig-body-pairs)))
 			`(def-macro (,name ... args) (match args ,,, match-cases)))))
 
 (def-macro (def-procs ... definitions)
 	(def-proc (match-case expected-name sig body)
 			(assert (binary= expected-name (first sig)))
-			`([,(rest sig)] ,body))
+			`([ ,,, (rest sig)] ,body))
 	(if (empty? definitions)
 		(throw (error "No matched cases for multi macro!"))
 		(let (
-			name (second definitions)
+			name (first (first definitions))
 			sig-body-pairs (chunk 2 definitions)
-			match-cases (map (proc (pair) (match-case name (first pair) (second pair))) sig-body-pairs))
+			match-cases (flatten (map (proc ([ sig body ]) (match-case name sig body)) sig-body-pairs)))
 			`(def-proc (,name ... args) (match args ,,, match-cases)))))
 
 (def-macros
 	(and) true
 	(and a) a
-	(and a b) (if a b a)
-	(and a ... rest) (if a (and ... rest) a))
+	(and a b) `(if ,a ,b ,a)
+	(and a ... rest) `(if ,a (and ,,, rest) ,a))
 
 (def-macros
 	(or) false
 	(or a) a
-	(or a b) (if a a b)
-	(or a ... rest) (if a a (or ... rest)))
+	(or a b) `(if ,a ,a ,b)
+	(or a ... rest) `(if ,a ,a (or ,,, rest)))
 
 (def-macros
 	(cond) nil
 	(cond condition body) `(if ,condition ,body)
 	(cond condition body ... more) `(if ,condition ,body ,((id cond) ... more)))
+
+(def-macro (\ ... args)
+	`(proc (_) ,,, args))
+
+(def-macro (partial ... args)
+	(def-proc (inner counter form)
+		(cond
+			(binary= form '_) (let (
+				new-form (Sym (Str "_" (get counter))))
+				(inc counter)
+				new-form)
+			(List? form) (map (\ (inner counter _)) form)
+			true form))
+	(let (
+		counter (Counter 0)
+		body (inner counter args)
+		params (map (\ (Sym (Str "_" _))) (range (get counter))))
+	`(proc ,params ,body)))
 
 ;; basic functions
 
@@ -116,6 +131,40 @@
 (def-impl (to-Str Nil) (proc () ""))
 
 ;; numeric operators
+
+(def-interface (binary> a b))
+(def-interface (binary< a b))
+(def-interface (binary>= a b))
+(def-interface (binary<= a b))
+
+(def-impl (binary> Num Num) (proc (a b) (js.> a b)))
+(def-impl (binary< Num Num) (proc (a b) (js.< a b)))
+(def-impl (binary>= Num Num) (proc (a b) (js.>= a b)))
+(def-impl (binary<= Num Num) (proc (a b) (js.<= a b)))
+
+(def-procs
+	(>) false
+	(> a) true
+	(> a b) (binary> a b)
+	(> a ... more) (reduce binary> a more))
+
+(def-procs
+	(<) false
+	(< a) true
+	(< a b) (binary> a b)
+	(< a ... more) (reduce binary< a more))
+
+(def-procs
+	(>=) false
+	(>= a) true
+	(>= a b) (binary> a b)
+	(>= a ... more) (reduce binary>= a more))
+
+(def-procs
+	(<=) false
+	(<= a) true
+	(<= a b) (binary> a b)
+	(<= a ... more) (reduce binary<= a more))
 
 (def-interface (inc a))
 (def-interface (dec a))
@@ -205,7 +254,7 @@
 	(rand a) (unary-rand a)
 	(rand a b) (binary-rand a b))
 
-;; iterator methods
+;; structural
 
 (def-interface (nth a) {
 	:default-impl (proc (xs n)
@@ -217,7 +266,61 @@
 (def-impl (nth List) (proc (a ... args)
 	(a.get ... args)))
 
-;; structural
+(def-interface (get a))
+
+(def-impl (get List) (proc (a ... args)
+	(a.get ... args)))
+
+(def-impl (get Map) (proc (a ... args)
+	(a.get ... args)))
+
+(def-procs
+	(=) true
+	(= a) true
+	(= a b) (binary= a b)
+	(= a ... rest) (reduce binary= a rest))
+
+(def-proc (/= ... args)
+	(not (= ... args)))
+
+;; asserts
+
+(def-proc (assert= ... args)
+	(assert (= ...args)))
+
+(def-proc (assert/= ... args)
+	(assert (/= ...args)))
+
+;; basic types
+
+(def-type (Counter value))
+
+(def-impl (inc Counter) (proc (c)
+	(js.set c "value" (inc c.value))))
+
+(def-impl (dec Counter) (proc (c)
+	(js.set c "value" (dec c.value))))
+
+(def-impl (get Counter) (proc (c)
+	c.value))
+
+(def-type (Range min max step))
+
+(def-impl (first Range) (proc (r)
+	r.min))
+
+(def-impl (rest Range) (proc ((Range min max step))
+	(Range (+ min step) max step)))
+
+(def-impl (empty? Range) (proc ((Range min max step))
+	(if (> step 0)
+		(>= (+ min step) max)
+		(<= (+ min step) max))))
+
+(def-procs
+	(range max) (Range 0 max 1)
+	(range min max) (Range min max (if (> max min) 1 -1))
+	(range min max step) (Range min max step))
 
 ;; import/export
 
@@ -230,4 +333,6 @@
 ;; smoke test
 
 (assert true)
-(assert (not false))
+(assert= 1 (first [1 2 3]))
+(assert= [2 3] (rest [1 2 3]))
+(assert= (+ 1 2 3 4) 10)

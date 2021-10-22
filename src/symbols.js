@@ -44,6 +44,6 @@ export const SpecialForms = {
 	QuasiQuote: Symbol.for("quasi-quote"),
 	Unquote: Symbol.for("unquote"),
 	UnquoteSplice: Symbol.for("unquote-splice"),
-	Splice: Symbol.for("..."),
+	Splice: Symbol.for("splice"),
 	Dot: Symbol.for("."),
 };

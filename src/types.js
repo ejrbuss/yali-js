@@ -4,6 +4,7 @@ import {
 	hash as ihash,
 	List as IList,
 	Map as IMap,
+	is,
 } from "immutable";
 import { Keyword } from "./keyword.js";
 import { print } from "./printer.js";
@@ -270,7 +271,7 @@ function onBinaryEqHash(type, impl) {
 export const BinaryEq = new Interface(
 	createBinarySignature("binary="),
 	IMap([
-		[DefaultImplKeyword, (a, b) => a === b],
+		[DefaultImplKeyword, (a, b) => is(a, b)],
 		[OnDefKeyword, onBinaryEqHash],
 	])
 );

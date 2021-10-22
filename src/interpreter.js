@@ -267,9 +267,9 @@ export class Interpreter {
 						);
 					}
 					if (isList(operand) && operand.first() === SpecialForms.Splice) {
-						operand = operand.get(1);
+						const sliceOperand = operand.get(1);
 						const rest = [...iterator];
-						if (!this.#assignBinding(operand, IList(rest), env)) {
+						if (!this.#assignBinding(sliceOperand, IList(rest), env)) {
 							return false;
 						}
 						spliced = true;
@@ -309,6 +309,7 @@ export class Interpreter {
 				}
 				return true;
 			}
+			console.log(new Error().stack);
 			const interpedType = this.#interp(type, env);
 			if (typeof interpedType !== "undefined") {
 				const signature = interpedType.signature;
@@ -620,7 +621,7 @@ export class Interpreter {
 
 	[SpecialForms.Splice]() {
 		this.#throw(
-			new Error("Cannot use unquote-splice outside of application or binding!")
+			new Error("Cannot use splice outside of application or binding!")
 		);
 	}
 

@@ -62,12 +62,15 @@ export function print(form) {
 		}
 		if (typeof form === "object" && form !== null) {
 			const constructor = form.constructor[Special.yaliConstructor];
-			if (typeof constructor !== "undefined") {
+			if (
+				typeof constructor !== "undefined" &&
+				typeof constructor.signature !== "undefined"
+			) {
 				const signature = constructor.signature;
 				const type = signature.first();
 				const properties = signature
 					.rest()
-					.map((propertySymbol) => form[propertySymbol.name]);
+					.map((propertySymbol) => form[propertySymbol.description]);
 				return innerPrint(IList.of(type, ...properties));
 			} else {
 				let type = form.constructor.name;
@@ -123,7 +126,10 @@ export function colorPrint(form, colors = DefaultColors) {
 		}
 		if (typeof form === "object" && form !== null) {
 			const constructor = form.constructor[Special.yaliConstructor];
-			if (typeof constructor !== "undefined") {
+			if (
+				typeof constructor !== "undefined" &&
+				typeof constructor.signature !== "undefined"
+			) {
 				const signature = constructor.signature;
 				const type = signature.first();
 				const properties = signature
