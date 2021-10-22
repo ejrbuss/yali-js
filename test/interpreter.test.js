@@ -121,19 +121,30 @@ testInterp(
 	"2"
 );
 testInterp("Eval can define", "(def e (__env)) (eval '(def x 4) e) x", "4");
-
-// TODO test Let custom type bindings
-// TODO test Throw (need to be able to create an error)
-// test("Def proc name", "(def p (proc (x) x)) (Str p)", '"#proc<p>"');
-
-// The following tests need to be moved until after prelude
-// testInterp(
-// 	"Recur to zeor",
-// 	"((proc (n) (if (binary= 0 n) 0 (recur (binary= n 1)))) 10)",
-// 	"0"
-// );
-// testInterp(
-// 	"Recur multiple arguments",
-// 	"((proc (l r) (if (__builtin__equals 0 l) r (recur (__builtin__sub l 1) (__builtin__add r 1)))) 100 50)",
-// 	"150"
-// );
+testInterp(
+	"Custom let binding",
+	"(def-type (Point x y)) (def p (Point 1 2)) (let ((Point a b) p) (js.- a b))",
+	"-1"
+);
+testInterp(
+	"Custom match binding",
+	"(def-type (Point x y)) (def p (Point 8 2)) (match p (Point a b) (js./ a b))",
+	"4"
+);
+testInterp("Test throw", "(try (throw (error)) 4)", "4");
+testInterp(
+	"Test throw with catch",
+	'(try (throw (error "test")) (catch error error.message))',
+	'"test"'
+);
+testInterp("Def proc name", "(def-proc (p x) x) (js.get p __name)", '"p"');
+testInterp(
+	"Recur to zero",
+	"(def-proc (p n) (if (binary= 0 n) 0 (recur (p (js.- n 1))))) (p 10)",
+	"0"
+);
+testInterp(
+	"Recur multiple arguments",
+	"(def-proc (p l n) (if (binary= 0 l) n (recur (p (js.- l 1) (js.+ n 1))))) (p 100 50)",
+	"150"
+);

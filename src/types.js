@@ -121,7 +121,6 @@ export function MapConstructor(...args) {
 
 const OnDefKeyword = Keyword.for("on-def");
 const DefaultImplKeyword = Keyword.for("default-impl");
-const DispatchOnKeyword = Keyword.for("dispatch-on");
 
 export class Interface {
 	#implTable;
@@ -129,7 +128,6 @@ export class Interface {
 	signature;
 	["on-def"];
 	["default-impl"];
-	["dispatch-on"];
 
 	constructor(signature, options = IMap()) {
 		assertType(ListConstructor, signature);
@@ -144,24 +142,12 @@ export class Interface {
 		if (typeof defaultImpl !== "undefined") {
 			defaultImpl = ProcConstructor(defaultImpl);
 		}
-		let dispatchOn = options.get(DispatchOnKeyword);
-		if (typeof dispatchOn !== "undefined") {
-			dispatchOn = ProcConstructor(dispatchOn);
-		} else {
-			// By default dispatch on typeOf
-			// Future TODO:
-			// Considder a more siphisticated default dispatch with support for
-			// deriving other types. The order of derivation determines dispatch
-			// order.
-			dispatchOn = (args) => IList.of(args.map(typeOf));
-		}
 		this[Special.name] = nameSym.description;
 		this.#implTable = IMap();
 		this.arity = signature.size - 1;
 		this.signature = signature;
 		this["on-def"] = onDef;
 		this["default-impl"] = defaultImpl;
-		this["dispatch-on"] = dispatchOn;
 		this.dispatch = this.dispatch.bind(this);
 		// Freeze current properties, but allow additional properties to be
 		// added (eg. Special symbols)
@@ -170,7 +156,7 @@ export class Interface {
 
 	["impl-signature"](args) {
 		assertType(ListConstructor, args);
-		return args.unshift(this.signature.first());
+		return `(${args.map(typeName).unshift(this[Special.name]).join(" ")})`;
 	}
 
 	["def-impl"](args, impl) {
@@ -190,42 +176,23 @@ export class Interface {
 	}
 
 	["impl-for"](...args) {
-		const slicedArgs = IList(args.slice(0, this.arity));
-		const dispatchValues = this["dispatch-on"](slicedArgs);
-		assertType(ListConstructor, dispatchValues);
-		for (const dispatchValue of dispatchValues) {
-			const impl = this.#implTable.get(dispatchValue);
-			if (typeof impl !== "undefined") {
-				return impl;
-			}
-		}
-		return this["default-impl"];
+		const typeArgs = IList(args.slice(0, this.arity));
+		const impl = this.#implTable.get(typeArgs);
+		return impl ?? this["default-impl"];
 	}
 
 	dispatch(...args) {
-		const slicedArgs = IList(args.slice(0, this.arity));
-		const dispatchValues = this["dispatch-on"](slicedArgs);
-		assertType(ListConstructor, dispatchValues);
-		for (const dispatchValue of dispatchValues) {
-			const impl = this.#implTable.get(dispatchValue);
-			if (typeof impl !== "undefined") {
-				return impl(...args);
-			}
+		const typeArgs = IList(args.slice(0, this.arity).map(typeOf));
+		const impl = this.#implTable.get(typeArgs);
+		if (typeof impl !== "undefined") {
+			return impl(...args);
 		}
 		if (typeof this["default-impl"] !== "undefined") {
 			return this["default-impl"](...args);
 		}
-		const name = this[Special.name];
-		const sig = print(this.signature);
 		const printedArgs = print(IList(args));
-		const implSigs = dispatchValues
-			.map((args) => print(this["impl-signature"](args)))
-			.join("\n\t");
-		const message = `The interface \`${name}\` is not implemented for arguments: \`${printedArgs}\`!
-
-To support this operation, implement one of the following:
-\t(def-impl ${implSigs} ...)
-`;
+		const implSig = this["impl-signature"](typeArgs);
+		const message = `The interface \`${implSig}\` is not implemented for arguments: \`${printedArgs}\`!`;
 		throw new Error(message);
 	}
 }

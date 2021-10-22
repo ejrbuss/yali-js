@@ -70,6 +70,8 @@ export function addBuiltins(env) {
 		eval: evalForm,
 		// interop
 		js: JsProxy,
+		// other
+		error,
 		// Specials
 		__env: () => getInterpreter().currentEnv,
 		__name: Special.name,
@@ -96,12 +98,6 @@ export function addBuiltins(env) {
 }
 
 const ReSafeIdentifier = /^[a-z_$][a-z_$\d]*/i;
-const Global =
-	typeof window !== "undefined"
-		? window
-		: typeof global !== "undefined"
-		? global
-		: {};
 
 export const JsProxy = new Proxy(
 	{
@@ -132,6 +128,8 @@ export const JsProxy = new Proxy(
 		"<<": (a, b) => a << b,
 		">>": (a, b) => a >> b,
 		">>>": (a, b) => a >>> b,
+		get: (a, b) => a[b],
+		set: (a, b, c) => (a[b] = c),
 		new: (a, ...args) => new a(...args),
 		delete: (a, b) => delete a[b],
 		void: (a) => void a,
@@ -179,8 +177,13 @@ export function addPrelude(env) {
 	const srcDir = dirname(fileURLToPath(import.meta.url));
 	const preludeFile = join(srcDir, "prelude.yali");
 	const preludeSrc = fs.readFileSync(preludeFile, "utf-8");
-	const preludeForms = read(preludeSrc);
-	preludeForms.forEach((form) => evalForm(form, env));
+	const preludeForms = read(preludeSrc, preludeFile);
+	try {
+		preludeForms.forEach((form) => evalForm(form, env));
+	} catch (error) {
+		console.error(error[Special.stack]);
+		throw error;
+	}
 }
 
 export function evalForm(form, env) {

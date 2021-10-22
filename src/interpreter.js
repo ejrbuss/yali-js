@@ -22,7 +22,7 @@ export class Interpreter {
 	constructor() {
 		this.globalEnv = new Env("root");
 		this.currentEnv = this.globalEnv;
-		this.currentApp = undefined;
+		this.currentProc = undefined;
 		this.stack = [];
 		Interpreter.running = Interpreter.running ?? this;
 	}
@@ -46,17 +46,23 @@ export class Interpreter {
 		if (typeof error === "object" && error !== null) {
 			const jsStack = error.stack;
 			const currentStack = error[Special.stack];
-			if (jsStack && typeof currentStack === "undefined") {
-				// TODO do better
-				const form = this.currentApp;
-				if (form) {
-					console.log(
-						`DEBUG ERROR HERE: ${print(form)} (file://${
-							form[Special.sourceRef]
-						})`
-					);
-				}
-				error[Special.stack] = [...this.stack];
+			if (
+				jsStack &&
+				typeof currentStack === "undefined" &&
+				this.stack.length > 0
+			) {
+				let stackStr = `${error.name}: ${error.message}\n`;
+				// The first stack frame is not within a procedure
+				this.stack.reverse().forEach(({ form, proc }) => {
+					const ref = form[Special.sourceRef];
+					if (typeof proc !== "undefined") {
+						const name = proc[Special.name] ?? proc.name;
+						stackStr += `    at ${name} ${ref}\n`;
+					} else {
+						stackStr += `    at ${ref}\n`;
+					}
+				});
+				error[Special.stack] = stackStr;
 			}
 		}
 		throw error;
@@ -79,54 +85,59 @@ export class Interpreter {
 			if (form in env) {
 				return interped;
 			}
-			this.#throw(new Error(printTag`Symbol ${form} is not defined!`));
+			this.#throw(new Error(printTag`Symbol \`${form}\` is not defined!`));
 		}
 		if (isList(form)) {
-			this.currentEnv = env;
-			this.currentApp = form;
-			const operands = form.toArray();
-			let operator = operands.shift();
-			if (typeof operator === "symbol") {
-				// special forms
-				if (operator in this) {
-					return this[operator](operands, env);
-				}
-				// macros
-				operator = this.#interp(operator, env);
-				if (operator[Special.macro] === true) {
-					const expansion = this.#expandMacro(operator, operands);
-					return this.#interp(expansion, env);
-				}
-			} else {
-				operator = this.#interp(operator, env);
-			}
-			// Try to convert to proc
-			if (typeof operator !== "function") {
-				if (operator && operator instanceof Interface) {
-					operator = operator.dispatch;
+			try {
+				this.currentEnv = env;
+				this.stack.push({ form, proc: this.currentProc });
+				const operands = form.toArray();
+				let operator = operands.shift();
+				if (typeof operator === "symbol") {
+					// special forms
+					if (operator in this) {
+						return this[operator](operands, env);
+					}
+					// macros
+					operator = this.#interp(operator, env);
+					if (operator[Special.macro] === true) {
+						const expansion = this.#expandMacro(operator, form, operands);
+						return this.#interp(expansion, env);
+					}
 				} else {
-					operator = this.#wrapExternal(() => ProcConstructor(operator));
+					operator = this.#interp(operator, env);
 				}
-			}
-
-			// Interped proc
-			let interpedOperands = this.#interpOperands(operands, env);
-			if (operator[Special.proc] === true) {
-				// Tail call stuff
-				for (;;) {
-					this.stack.push(operator);
-					let interped = operator(...interpedOperands);
-					this.stack.pop();
-					if (interped && interped instanceof Recured) {
-						operator = interped.operator;
-						interpedOperands = interped.operands;
+				// Try to convert to proc
+				if (typeof operator !== "function") {
+					if (operator && operator instanceof Interface) {
+						operator = operator.dispatch;
 					} else {
-						return interped;
+						operator = this.#wrapExternal(() => ProcConstructor(operator));
 					}
 				}
+
+				// Interped proc
+				let interpedOperands = this.#interpOperands(operands, env);
+				if (operator[Special.proc] === true) {
+					const prevProc = this.currentProc;
+					this.currentProc = operator;
+					// Tail call stuff
+					for (;;) {
+						let interped = operator(...interpedOperands);
+						if (interped && interped instanceof Recured) {
+							operator = interped.operator;
+							interpedOperands = interped.operands;
+						} else {
+							this.currentProc = prevProc;
+							return interped;
+						}
+					}
+				}
+				// External function (need to catch/rethrow errors)
+				return this.#wrapExternal(() => operator(...interpedOperands));
+			} finally {
+				this.stack.pop();
 			}
-			// External function (need to catch/rethrow errors)
-			return this.#wrapExternal(() => operator(...interpedOperands));
 		}
 		// All other forms evaluate to themselves
 		return form;
@@ -174,8 +185,6 @@ export class Interpreter {
 				const iterable = this.#wrapExternal(() => toJsIter(value));
 				const iterator = iterable[Symbol.iterator]();
 				let spliced = false;
-				// TODO support nesting the slice to get last element
-				// eg. (first ... middle last)
 				operands.forEach((operand) => {
 					if (spliced) {
 						this.#throw(
@@ -196,28 +205,39 @@ export class Interpreter {
 				return;
 			}
 			if (type === ConstructorSymbols.Map && isMap(value)) {
-				// TODO support splice by maintaining a spliced map
-				let remaining = value;
+				let remainingValue = value;
 				const length = operands.length;
 				for (let i = 0; i < length; i += 2) {
 					const key = operands[i];
-					if (key === SpecialForms.spliced) {
+					if (isList(key) && key.first() === SpecialForms.Splice) {
+						const operand = key.get(1);
+						this.#assignBinding(operand, remainingValue, env);
+						remainingValue = IList([]);
+					} else {
+						const operand = operands[i + 1];
+						const interpedKey = this.#interp(key, env);
+						this.#assignBinding(operand, value.get(interpedKey), env);
+						remainingValue = remainingValue.remove(interpedKey);
 					}
-					const interpedKey = this.#interp(key, env);
-					const operand = operands[i + 1];
-					this.#assignBinding(operand, value.get(interpedKey), env);
 				}
 				return;
 			}
 			const interpedType = this.#interp(type, env);
-			this.#wrapExternal(() => assertType(interpedType, value));
-			// recurse with the list constructor
-			// TODO replace with interface call to pattern-of
-			this.#assignBinding(
-				IList.of(ConstructorSymbols.List, ...operands),
-				value,
-				env
-			);
+			if (typeof interpedType !== "undefined") {
+				const signature = interpedType.signature;
+				if (isList(signature)) {
+					const properties = signature
+						.rest()
+						.map((propertySymbol) => value[propertySymbol.description]);
+					this.#wrapExternal(() => assertType(interpedType, value));
+					this.#assignBinding(
+						IList.of(ConstructorSymbols.List, ...operands),
+						properties,
+						env
+					);
+					return;
+				}
+			}
 		}
 		this.#throw(
 			new Error(
@@ -266,34 +286,51 @@ export class Interpreter {
 				return iterator.next().done;
 			}
 			if (type === ConstructorSymbols.Map && isMap(value)) {
+				let remainingValue = value;
 				const length = operands.length;
 				for (let i = 0; i < length; i += 2) {
 					const key = operands[i];
-					const interpedKey = this.#interp(key, env);
-					const operand = operands[i + 1];
-					const valueAtKey = value.get(interpedKey);
-					if (!this.#assignStrictBinding(operand, valueAtKey, env)) {
-						return false;
+					if (isList(key) && key.first() === SpecialForms.Splice) {
+						const operand = key.get(1);
+						if (!this.#assignStrictBinding(operand, remainingValue, env)) {
+							return false;
+						}
+						remainingValue = IList([]);
+					} else {
+						const operand = operands[i + 1];
+						const interpedKey = this.#interp(key, env);
+						if (
+							!this.#assignStrictBinding(operand, value.get(interpedKey), env)
+						) {
+							return false;
+						}
+						remainingValue = remainingValue.remove(interpedKey);
 					}
 				}
 				return true;
 			}
 			const interpedType = this.#interp(type, env);
-			if (interpedType !== typeOf(value)) {
-				return false;
+			if (typeof interpedType !== "undefined") {
+				const signature = interpedType.signature;
+				if (
+					interpedType === this.#wrapExternal(() => typeOf(value)) &&
+					isList(signature)
+				) {
+					const properties = signature
+						.rest()
+						.map((propertySymbol) => value[propertySymbol.description]);
+					return this.#assignStrictBinding(
+						IList.of(ConstructorSymbols.List, ...operands),
+						properties,
+						env
+					);
+				}
 			}
-			// TODO replace with interface call to pattern-of
-			// recurse with the list constructor
-			return this.#assignStrictBinding(
-				IList.of(ConstructorSymbols.List, ...operands),
-				value,
-				env
-			);
 		}
 		return binding === value;
 	}
 
-	#expandMacro(macro, operands) {
+	#expandMacro(macro, form, operands) {
 		let cache;
 		if (Interpreter.#MacroCache.has(macro)) {
 			cache = Interpreter.#MacroCache.get(macro);
@@ -301,13 +338,29 @@ export class Interpreter {
 			cache = IMap();
 			Interpreter.#MacroCache.set(macro, cache);
 		}
+		const prevProc = this.currentProc;
+		this.currentProc = macro;
 		const listOperands = IList(operands);
 		if (cache.has(listOperands)) {
 			return cache.get(listOperands);
 		}
 		const expanded = macro(...operands);
 		cache.set(listOperands, expanded);
+		this.currentProc = prevProc;
+		if (
+			typeof form !== "undefined" &&
+			typeof form[Special.sourceRef] !== "undefined"
+		) {
+			this.#deeplyApplySourceRef(expanded, form[Special.sourceRef]);
+		}
 		return expanded;
+	}
+
+	#deeplyApplySourceRef(form, ref) {
+		if (isList(form)) {
+			form[Special.sourceRef] = ref;
+			form.forEach((subForm) => this.#deeplyApplySourceRef(subForm, ref));
+		}
 	}
 
 	// Special forms
@@ -329,6 +382,7 @@ export class Interpreter {
 		const name = signature.first();
 		const params = signature.rest();
 		const proc = this[SpecialForms.Proc]([params, ...body], env);
+		proc.arity = params.includes(SpecialForms.Splice) ? Infinity : params.size;
 		proc[Special.name] = name.description;
 		this[SpecialForms.Def]([name, proc], env);
 		return proc;
@@ -341,23 +395,25 @@ export class Interpreter {
 	}
 
 	[SpecialForms.DefType](operands, env) {
-		const [signature, ...body] = operands;
+		const [signature] = operands;
 		this.#wrapExternal(() => {
 			assertType(ListConstructor, signature);
-			assertType(SymConstructor, signature.first());
+			signature.forEach((symbol) => assertType(SymConstructor, symbol));
 		});
+		class Anonymous {}
 		const name = signature.first();
 		const params = signature.rest();
-		const Anonymous = class {};
-		const proc = this[SpecialForms.Proc]([params, ...body], env);
-		// TODO arity
 		const constructor = (...args) => {
 			const target = new Anonymous();
-			proc.apply(target, args);
+			for (let i = 0; i < params.size; i += 1) {
+				target[params.get(i).description] = args[i];
+			}
 			return target;
 		};
 		constructor[Special.name] = name.description;
 		constructor[Special.jsConstructor] = Anonymous;
+		constructor.signature = signature;
+		Anonymous[Special.name] = name.description;
 		Anonymous[Special.yaliConstructor] = constructor;
 		return this[SpecialForms.Def]([name, constructor], env);
 	}
@@ -518,7 +574,7 @@ export class Interpreter {
 		const procedMacro = this.#wrapExternal(() =>
 			ProcConstructor(interpedMacro)
 		);
-		return this.#expandMacro(procedMacro, macroOperands);
+		return this.#expandMacro(procedMacro, undefined, macroOperands);
 	}
 
 	[SpecialForms.Quote](operands) {
@@ -584,9 +640,5 @@ export class Interpreter {
 			result = bound;
 		}
 		return result;
-	}
-
-	[SpecialForms.Set](operands, env) {
-		throw new Error("TODO!");
 	}
 }

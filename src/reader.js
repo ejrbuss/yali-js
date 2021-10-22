@@ -8,18 +8,14 @@ export class IncompleteForm extends SyntaxError {}
 const ReWhitepsace = /^(\s|(;[^\n]*))+/;
 const ReString = /^"((\\.)|[^"])*"/;
 const ReSymbol = /^[^\s#;\(\)\[\]\{\}"]+/;
+const ReBinInt = /^0b[01]+$/i;
+const ReOctInt = /^0o[0-7]+$/i;
+const ReHexInt = /^0x[\da-f]+$/i;
 const ReNumber = /^[+-]?(\d+|\.\d+|\d+\.\d+|\d+\.)(e[+-]?\d+)?$/;
 
-// TODO support literal -Infinity, Infinity
-// TODO support different base integers (0b 0o 0x)
-// TODO support commas in numbers
-// TODO change comment syntax to -- and ---
-// TODO capture --- comments and attach them to the next form as Special.help
-// tODO capture :: as Special.protocol
 export function read(source, file = "<anonymous>") {
 	const scanner = new Scanner(source, file);
 
-	// TODO attach sourceRef for all lists here?
 	function readForm() {
 		scanner.scanRegexp(ReWhitepsace);
 		// List
@@ -75,11 +71,29 @@ export function read(source, file = "<anonymous>") {
 			if (image === "false") {
 				return false;
 			}
+			// infinity
+			if (image === "infinity") {
+				return Infinity;
+			}
+			// -infinity
+			if (image === "-infinity") {
+				return -Infinity;
+			}
 			// keyword
 			if (image.startsWith(":")) {
 				return Keyword.for(image.substr(1));
 			}
-			// number
+			// integers
+			if (ReBinInt.test(image)) {
+				return parseInt(image.substr(2), 0b10);
+			}
+			if (ReOctInt.test(image)) {
+				return parseInt(image.substr(2), 0o10);
+			}
+			if (ReHexInt.test(image)) {
+				return parseInt(image.substr(2), 0x10);
+			}
+			// floats
 			if (ReNumber.test(image)) {
 				return parseFloat(image);
 			}

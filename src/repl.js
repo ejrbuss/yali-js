@@ -1,36 +1,9 @@
 import repl from "repl";
 import { fileURLToPath } from "url";
-import { applyCode, Dim } from "./ansi.js";
-import { colorPrint, DefaultColors, print } from "./printer.js";
+import { colorPrint, print } from "./printer.js";
 import { IncompleteForm, read } from "./reader.js";
 import { getInterpreter, evalForm } from "./builtins.js";
 import { Special, SpecialForms } from "./symbols.js";
-
-// TODO handle printing errors in the interpreter not here (ie. rewrite Error.stack)
-// Then just handle printing errors by returning them
-function writeOutput(output) {
-	if (output && (output instanceof Error || output[Special.stack])) {
-		const name = output.name;
-		const message = output.message;
-		const header = `${name}: ${message}`;
-		const jsStack = output.stack
-			.split("\n")
-			.filter((line) => /at.*file:/.test(line))
-			.join("\n");
-		let yaliStack = "";
-		if (output[Special.stack] && output[Special.stack].length > 0) {
-			yaliStack =
-				output[Special.stack]
-					.map((proc) => {
-						const name = proc[Special.name] ?? proc.name ?? "anonymous";
-						return `    at ${name}`;
-					})
-					.join("\n") + "\n";
-		}
-		return `${header}\n${yaliStack}${applyCode(Dim, jsStack)}`;
-	}
-	return print(output, DefaultColors);
-}
 
 export function completerFor(interpreter) {
 	return function (line) {
@@ -106,7 +79,7 @@ export function replFor(interpreter, options = { color: true, preview: true }) {
 
 	function replWriter(output) {
 		if (output && output instanceof Error) {
-			return `${output.stack}`;
+			return output[Special.stack] ? output[Special.stack] : output.stack;
 		}
 		return options.color ? colorPrint(output) : print(output);
 	}

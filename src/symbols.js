@@ -46,5 +46,4 @@ export const SpecialForms = {
 	UnquoteSplice: Symbol.for("unquote-splice"),
 	Splice: Symbol.for("..."),
 	Dot: Symbol.for("."),
-	Set: Symbol.for("set!"),
 };

@@ -1,17 +1,21 @@
 (def *root-env* (__env))
 
 ;; temporary and bad
-(def reload (proc ()
-	(eval (js.fs.readFileSync "./src/prelude.yali" "utf-8") *root-env*)))
+(def-proc (reload)
+	(let (
+		prelude-file "./src/prelude.yali"
+		source (js.fs.readFileSync prelude-file "utf-8")
+		forms (read source prelude-file))
+		(reduce (proc (acc form) (eval form *root-env*)) nil forms)))
 
-(def log (proc (... args)
-	(def write process.stdout.write)
+(def-proc (log ... args)
+	(def write js.process.stdout.write)
 	(for-each (proc (a)
-			(write a)
+			(write (Str a))
 			(write " "))
 		args)
 	(write "\n")
-	nil))
+	nil)
 
 ;; Bootstrap basic list operations
 
@@ -24,33 +28,43 @@
 (def-impl (empty? List) (proc (list)
 	(list.isEmpty)))
 
+(def-proc (second xs)
+	(first (first xs)))
+
+;; Bootstrap asserts
+
+(def-macro (assert condition message)
+	`(if ,condition
+		nil
+		(throw (error (or
+			,message
+			(Str "Assertion of `" (print (quote ,condition)) "` failed!"))))))
+
 ;; Basic macros
 
-;; TODO fallthrough should result in error, not nil!
-(def-macro (def-macros ... defs)
-	(def-proc (def-to-case def)
-		;; todo assert names match
+(def-macro (def-macros ... definitions)
+	(def-proc (match-case expected-name sig body)
+			(assert (binary= expected-name (first sig)))
+			`([,(rest sig)] ,body))
+	(if (empty? definitions)
+		(throw (error "No matched cases for multi macro!"))
 		(let (
-			[sig body] def
-			binding [`List ... (rest sig)])
-			`(,binding ,body)))
-	(let (
-		name (first (first defs))
-		cases (flatten (map def-to-case (chunk 2 defs))))
-		`(def-macro (,name ... args) (match args ,,, cases))))
+			name (second definitions)
+			sig-body-pairs (chunk 2 definitions)
+			match-cases (map (proc (pair) (match-case name (first pair) (second pair))) sig-body-pairs))
+			`(def-macro (,name ... args) (match args ,,, match-cases)))))
 
-;; TODO fallthrouuugh should result in error, not nil!
-(def-macro (def-procs ... defs)
-	(def-proc (def-to-case def)
-		;; todo assert names match
+(def-macro (def-procs ... definitions)
+	(def-proc (match-case expected-name sig body)
+			(assert (binary= expected-name (first sig)))
+			`([,(rest sig)] ,body))
+	(if (empty? definitions)
+		(throw (error "No matched cases for multi macro!"))
 		(let (
-			[sig body] def
-			binding [`List ... (rest sig)])
-			`(,binding ,body)))
-	(let (
-		name (first (first defs))
-		cases (flatten (map def-to-case (chunk 2 defs))))
-		`(def-proc (,name ... args) (match args ,,, cases))))
+			name (second definitions)
+			sig-body-pairs (chunk 2 definitions)
+			match-cases (map (proc (pair) (match-case name (first pair) (second pair))) sig-body-pairs))
+			`(def-proc (,name ... args) (match args ,,, match-cases)))))
 
 (def-macros
 	(and) true
@@ -173,40 +187,32 @@
 (def-impl (ceil Num) js.Math.ceil)
 (def-impl (round Num) js.Math.round)
 
-(def-interface (rand a) {
-	:default-impl (proc (... args)
-	;; fallback is expected for most calls
-	(if (empty? args)
-		(js.Math.random)
-		;; todo better error handling here
-		((rand.get-method [(first args)]) ... args))) })
+(def-interface (unary-rand a))
 
-(def-impl (rand Num) (proc (... args)
-	(match args
-		[] (js.Math.random)
-		[max] (floor (* (js.Math.random) max))
-		[min max] (floor (+ min (* (js.Math.random) (- max min)))))))
+(def-impl (unary-rand Num) (proc (max)
+	(floor (* js.Math.random max))))
 
-(def-impl (rand List)	(proc (list)
+(def-impl (unary-rand List) (proc (list)
 	(nth list (rand (count list)))))
 
-;; ((get Math floor))
-;; (set! Math floor "")
-;; (def Point (type (self x y)
-;;		(def-prop self.x x) ; assign and create proc self.x
-;;      (def-prop self.y y)))
-;;
-;; as special forms::
-;; def def-macro def-type def-prop
+(def-interface (binary-rand a b))
 
-;; (def-struct (Point x { :type NUm } y { :type NUm }))
-;; ordering
+(def-impl (binary-rand Num Num) (proc (min max)
+	(floor (+ min (* js.Math.random (- max min))))))
 
-
+(def-procs
+	(rand) (js.Math.random)
+	(rand a) (unary-rand a)
+	(rand a b) (binary-rand a b))
 
 ;; iterator methods
 
-(def-interface (nth a)) ;; todo fallback
+(def-interface (nth a) {
+	:default-impl (proc (xs n)
+		(if (= n 0)
+			(first xs)
+			(nth (rest xs) (dec n))))
+})
 
 (def-impl (nth List) (proc (a ... args)
 	(a.get ... args)))
@@ -221,11 +227,7 @@
 ;; (module "name" {} ...) ; name will be appended to the file module it is present in, but can be overriden
 ;; support yali and js files
 
-;; (def (first list::(List Any))
-;;   (list.first))
+;; smoke test
 
-;; (List Any)
-
-(def-struct (Ratio num denom))
-;; syntactic sugarg for
-(def-struct (Ratio num: T denom: T) (forall T))
+(assert true)
+(assert (not false))
